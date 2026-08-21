@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod commands;
 pub mod error;
 pub mod history;
 pub mod process;
