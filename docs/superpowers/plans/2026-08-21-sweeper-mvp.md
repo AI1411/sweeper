@@ -1350,7 +1350,7 @@ Draw a table with columns PID / PROCESS / PORT / CPU / MEM, search line, help fo
 - `q` quits
 - Initial load: `list_processes` then spawn `std::thread` to fetch `listening_ports` and merge into app on next draw (channel `std::sync::mpsc`)
 
-- [ ] **Step 4: Wire `Target::Tui => tui::run()?`**
+- [ ] **Step 4: Wire `Target::Tui => tui::run()?` in `main.rs` (`match cli.target`)**
 
 - [ ] **Step 5: Manual test on macOS**
 
