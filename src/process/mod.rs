@@ -1,3 +1,4 @@
+pub mod kill;
 pub mod list;
 pub mod ports;
 pub mod protect;
