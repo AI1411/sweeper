@@ -2,13 +2,29 @@
 
 実装計画 [`../plans/2026-08-21-sweeper-mvp.md`](../plans/2026-08-21-sweeper-mvp.md) の Task 1–11 を Issue 化した定義です。
 
-この環境の GitHub トークンは **Issue 作成権限がない**ため、ローカルで次を実行してください。
+Cloud Agent 組み込みの GitHub App トークンは **Issue 作成権限がない**ことがあります。  
+Personal Access Token を **`GITHUB_PAT`** として登録し、次を実行してください。
 
 ```bash
 ./scripts/create-github-issues.sh
 ```
 
-前提: `gh` 認証済み、`repo` スコープで Issue 作成可能であること。
+### Cursor Cloud にトークンを登録する
+
+1. GitHub で Fine-grained PAT を作成（この repo に Issues: Read and write）
+2. [Cloud Agents → Secrets](https://cursor.com/dashboard/cloud-agents) を開く
+3. Secret を追加:
+   - Name: `GITHUB_PAT`（`GH_TOKEN` は使わない — Cursor 側と衝突しやすい）
+   - Type: **Runtime Secret**
+   - Value: 作成した PAT
+4. **新しい** Cloud Agent を起動（既存ランには注入されないことがある）
+
+ローカルなら:
+
+```bash
+export GITHUB_PAT=ghp_...   # チャットに貼らない
+./scripts/create-github-issues.sh
+```
 
 | # | ファイル | タイトル |
 |---|---|---|

@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # Create GitHub issues from docs/superpowers/issues/*.md
-# Requires: gh auth with permission to create issues.
+#
+# Auth (priority):
+#   1. GITHUB_PAT  — personal access token (recommended for Cloud Agents)
+#   2. Existing `gh` login
+#
+# Do NOT put the token in the repo. For Cursor Cloud Agents, add GITHUB_PAT
+# as a Runtime Secret at https://cursor.com/dashboard/cloud-agents
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ISSUES_DIR="$ROOT/docs/superpowers/issues"
 
-if ! gh auth status >/dev/null 2>&1; then
-  echo "error: gh is not authenticated" >&2
+if [[ -n "${GITHUB_PAT:-}" ]]; then
+  export GH_TOKEN="$GITHUB_PAT"
+  echo "Using GITHUB_PAT for gh authentication"
+elif ! gh auth status >/dev/null 2>&1; then
+  echo "error: set GITHUB_PAT or run \`gh auth login\`" >&2
+  echo "  Cursor Cloud: add Runtime Secret GITHUB_PAT in the dashboard" >&2
   exit 1
 fi
 
