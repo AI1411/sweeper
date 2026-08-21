@@ -611,42 +611,35 @@ sw :3000 --force
 
 # 21. 技術スタック
 
+詳細は [技術スタック設計](./superpowers/specs/2026-08-21-tech-stack-design.md) を正とする。
+
 ## 言語
 
-**Go**
+**Rust**
 
 理由：
 
-- CLIとの相性が良い
-- 起動が高速
+- CLI / TUI エコシステムが成熟している（clap, ratatui）
 - 単一バイナリとして配布できる
-- クロスコンパイルしやすい
-- プロセス操作との相性が良い
-- Homebrewで配布しやすい
+- プロセス操作・シグナル制御のクレートが揃っている
+- Homebrew で配布しやすい
+- 類似ツール（例: bottom）の先行事例がある
+
+（旧案の Go は採用しない。）
+
+## CLI
+
+**clap**（derive）
 
 ## TUI
 
-**Bubble Tea**
+**ratatui** + **crossterm**
 
-TUI構築に利用する。
+## プロセス情報
 
-## スタイリング
-
-**Lip Gloss**
-
-TUIのレイアウト・装飾に利用する。
-
-## macOSプロセス情報
-
-初期実装ではmacOS標準コマンドの利用も許容する。
-
-例：
-
-```bash
-ps
-lsof
-kill
-```
+- 一覧 / CPU / MEM: **sysinfo**
+- シグナル: **nix**（SIGTERM / SIGKILL）
+- ポート: 当面 **lsof** 呼び出しを許容
 
 ポート検索例：
 
@@ -654,7 +647,13 @@ kill
 lsof -nP -iTCP:3000 -sTCP:LISTEN
 ```
 
-将来的にはOS APIやGoライブラリによる直接取得も検討する。
+将来的には macOS API（libproc 等）による直接取得も検討する。
+
+## その他（MVP）
+
+- 履歴: JSON（`~/Library/Application Support/sweeper/`）
+- エラー: thiserror + anyhow
+- 配布: 単一バイナリ + Homebrew
 
 ---
 
