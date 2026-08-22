@@ -155,12 +155,21 @@ fn handle_key(
         KeyCode::Esc => {
             if app.show_detail {
                 app.show_detail = false;
+            } else if app.expanded_project.is_some() {
+                app.collapse_project();
             } else {
                 app.should_quit = true;
                 return Ok(true);
             }
         }
-        KeyCode::Enter | KeyCode::Char('i') => app.toggle_detail(),
+        KeyCode::Enter => {
+            if app.in_project_list() {
+                app.toggle_project_expand();
+            } else {
+                app.toggle_detail();
+            }
+        }
+        KeyCode::Char('i') => app.toggle_detail(),
         KeyCode::Char('/') => {
             app.searching = true;
         }
@@ -177,6 +186,7 @@ fn handle_key(
         KeyCode::Char('T') => request_kill_preview(app, terminal, true, true)?,
         KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('e') => app.toggle_tree_view(),
+        KeyCode::Char('P') => app.toggle_project_view(),
         KeyCode::Char('r') => {
             app.refresh();
             app.status = "Refreshing processes + ports…".into();
