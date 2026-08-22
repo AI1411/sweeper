@@ -6,11 +6,12 @@ use crate::commands::confirm::confirm;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
+use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
 use crate::style as sty;
 
-pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
+pub fn run_clean(force: bool, exclude: &[String], dry_run: bool) -> anyhow::Result<()> {
     let mut procs = list_processes();
     let ports = listening_ports().unwrap_or_default();
     merge_ports(&mut procs, &ports);
@@ -47,6 +48,12 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
         }
     }
     if proposals.is_empty() {
+        return Ok(());
+    }
+    if dry_run {
+        let roots: Vec<u32> = proposals.iter().map(|c| c.process.pid).collect();
+        let planned = plan_kills(&procs, &roots, false);
+        print_dry_run(&planned, false);
         return Ok(());
     }
     if !confirm("Select processes to clean (confirm each)?")? {

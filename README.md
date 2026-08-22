@@ -62,6 +62,7 @@ sw project my-app
 | --- | --- |
 | `--force` | Allow SIGKILL when a process does not exit after SIGTERM |
 | `--tree` | Also kill descendants (PPID tree), children first |
+| `--dry-run` | Show kill targets without sending signals |
 | `-h`, `--help` | Print help |
 
 Flags may appear before or after targets:

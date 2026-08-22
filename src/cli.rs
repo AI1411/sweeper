@@ -28,6 +28,10 @@ pub struct CliArgs {
     #[arg(long, global = true)]
     pub tree: bool,
 
+    /// Show kill targets without sending signals
+    #[arg(long = "dry-run", global = true)]
+    pub dry_run: bool,
+
     #[command(subcommand)]
     subcommand: Option<RawSub>,
 
@@ -40,6 +44,7 @@ pub struct CliArgs {
 pub struct Cli {
     pub force: bool,
     pub tree: bool,
+    pub dry_run: bool,
     pub target: Target,
 }
 
@@ -81,11 +86,13 @@ impl Cli {
     fn from_args(args: CliArgs) -> Self {
         let mut force = args.force;
         let mut tree = args.tree;
+        let mut dry_run = args.dry_run;
         let mut raw_targets = Vec::new();
         for t in args.raw_targets {
             match t.as_str() {
                 "--force" => force = true,
                 "--tree" => tree = true,
+                "--dry-run" => dry_run = true,
                 _ => raw_targets.push(t),
             }
         }
@@ -93,6 +100,7 @@ impl Cli {
         Self {
             force,
             tree,
+            dry_run,
             target,
         }
     }

@@ -1,6 +1,7 @@
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::{find_by_name_fuzzy, list_processes};
+use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::tree::collect_tree_pids;
 use crate::process::ProcessInfo;
 use crate::report;
@@ -8,7 +9,7 @@ use crate::style;
 
 use super::confirm::confirm;
 
-pub fn run_name(query: &str, force: bool, tree: bool) -> anyhow::Result<()> {
+pub fn run_name(query: &str, force: bool, tree: bool, dry_run: bool) -> anyhow::Result<()> {
     let matches = find_by_name_fuzzy(query);
     if matches.is_empty() {
         println!(
@@ -20,6 +21,13 @@ pub fn run_name(query: &str, force: bool, tree: bool) -> anyhow::Result<()> {
 
     let all = list_processes();
     let targets = expand_targets(&all, &matches, tree);
+
+    if dry_run {
+        let roots: Vec<u32> = targets.iter().map(|p| p.pid).collect();
+        let planned = plan_kills(&all, &roots, tree);
+        print_dry_run(&planned, tree);
+        return Ok(());
+    }
 
     println!(
         "{} {} processes{}\n",

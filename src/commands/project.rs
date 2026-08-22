@@ -1,13 +1,14 @@
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
+use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::project::{find_projects_by_name, group_projects, ProjectGroup};
 use crate::style;
 
 use super::confirm::confirm;
 
-pub fn run_project(name: Option<String>, force: bool) -> anyhow::Result<()> {
+pub fn run_project(name: Option<String>, force: bool, dry_run: bool) -> anyhow::Result<()> {
     let mut procs = list_processes();
     let ports = listening_ports().unwrap_or_default();
     merge_ports(&mut procs, &ports);
@@ -15,7 +16,7 @@ pub fn run_project(name: Option<String>, force: bool) -> anyhow::Result<()> {
 
     match name {
         None => list_all(&groups),
-        Some(q) => kill_named(&groups, &q, force),
+        Some(q) => kill_named(&groups, &q, force, dry_run, &procs),
     }
 }
 
@@ -58,7 +59,13 @@ fn list_all(groups: &[ProjectGroup]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn kill_named(groups: &[ProjectGroup], query: &str, force: bool) -> anyhow::Result<()> {
+fn kill_named(
+    groups: &[ProjectGroup],
+    query: &str,
+    force: bool,
+    dry_run: bool,
+    procs: &[crate::process::ProcessInfo],
+) -> anyhow::Result<()> {
     let hits = find_projects_by_name(groups, query);
     if hits.is_empty() {
         println!("{}", style::warn(format!("No project matching '{query}'")));
@@ -113,6 +120,12 @@ fn kill_named(groups: &[ProjectGroup], query: &str, force: bool) -> anyhow::Resu
         style::dim("memory"),
         style::mem(format!("{:.1} GB", total as f64 / 1e9))
     );
+    if dry_run {
+        let roots: Vec<u32> = g.processes.iter().map(|p| p.pid).collect();
+        let planned = plan_kills(procs, &roots, false);
+        print_dry_run(&planned, false);
+        return Ok(());
+    }
     if !confirm(&format!("Kill all processes in project '{}'?", g.name))? {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
