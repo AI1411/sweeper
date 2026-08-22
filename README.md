@@ -79,6 +79,9 @@ Launch with bare `sw`.
 | Key | Action |
 | --- | --- |
 | `↑` / `↓` | Move |
+| `g` / `G` | Jump to first / last row |
+| `PgUp` / `PgDn` | Page up / down |
+| `Ctrl-u` / `Ctrl-d` | Page up / down |
 | `Space` | Select / deselect |
 | `/` | Search |
 | `k` | SIGTERM selected |

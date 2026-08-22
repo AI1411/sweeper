@@ -61,6 +61,9 @@ fn draw_search(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
+    let viewport = area.height.saturating_sub(3) as usize;
+    app.set_viewport_rows(viewport);
+
     let header = Row::new(vec!["", "PID", "PROCESS", "PORT", "CPU", "MEM"])
         .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
 
@@ -154,6 +157,16 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Move  "),
+        Span::styled(
+            "[g/G]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Jump  "),
+        Span::styled(
+            "[PgUp/PgDn]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Page  "),
         Span::styled(
             "[Space]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),

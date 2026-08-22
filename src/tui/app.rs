@@ -17,6 +17,8 @@ pub struct App {
     pub ports_only: bool,
     pub last_ports: Vec<(u16, u32)>,
     pub table_state: TableState,
+    /// Visible table body rows (updated each draw for page navigation).
+    pub viewport_rows: usize,
 }
 
 impl App {
@@ -33,6 +35,7 @@ impl App {
             ports_only: false,
             last_ports: Vec::new(),
             table_state: TableState::default(),
+            viewport_rows: 20,
         };
         app.refilter();
         app
@@ -99,6 +102,97 @@ impl App {
         if !self.filtered.is_empty() && self.cursor + 1 < self.filtered.len() {
             self.cursor += 1;
             self.sync_table_state();
+        }
+    }
+
+    pub fn move_first(&mut self) {
+        if !self.filtered.is_empty() {
+            self.cursor = 0;
+            self.sync_table_state();
+        }
+    }
+
+    pub fn move_last(&mut self) {
+        if !self.filtered.is_empty() {
+            self.cursor = self.filtered.len() - 1;
+            self.sync_table_state();
+        }
+    }
+
+    pub fn move_page_up(&mut self, step: usize) {
+        if self.filtered.is_empty() {
+            return;
+        }
+        let step = step.max(1);
+        self.cursor = self.cursor.saturating_sub(step);
+        self.sync_table_state();
+    }
+
+    pub fn move_page_down(&mut self, step: usize) {
+        if self.filtered.is_empty() {
+            return;
+        }
+        let step = step.max(1);
+        let max = self.filtered.len() - 1;
+        self.cursor = (self.cursor + step).min(max);
+        self.sync_table_state();
+    }
+
+    pub fn set_viewport_rows(&mut self, rows: usize) {
+        self.viewport_rows = rows.max(1);
+    }
+
+    /// One-line kill preview for status bar (current row or multi-select).
+    pub fn format_kill_preview(&self, tree: bool) -> String {
+        let roots = self.pids_to_kill();
+        if roots.is_empty() {
+            return "Nothing to kill".into();
+        }
+        let tree_hint = if tree { " (+ descendants)" } else { "" };
+        if !self.selected.is_empty() {
+            return format!(
+                "Kill preview: {} selected process(es){}",
+                self.selected.len(),
+                tree_hint
+            );
+        }
+        let p = self
+            .filtered
+            .get(self.cursor)
+            .and_then(|i| self.processes.get(*i));
+        match p {
+            Some(proc) => {
+                let ports = if proc.ports.is_empty() {
+                    String::new()
+                } else {
+                    let list = proc
+                        .ports
+                        .iter()
+                        .map(|port| format!(":{port}"))
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!(" {list}")
+                };
+                let cmd = proc
+                    .command
+                    .as_deref()
+                    .map(Self::format_cmd_preview)
+                    .unwrap_or_default();
+                format!(
+                    "Kill preview → {}{} pid{}{}{}",
+                    proc.name, tree_hint, proc.pid, ports, cmd
+                )
+            }
+            None => "Nothing to kill".into(),
+        }
+    }
+
+    fn format_cmd_preview(cmd: &str) -> String {
+        const MAX: usize = 40;
+        if cmd.len() <= MAX {
+            format!(" {cmd}")
+        } else {
+            format!(" {}…", cmd.chars().take(MAX).collect::<String>())
         }
     }
 
@@ -231,5 +325,64 @@ mod tests {
         app.refilter();
         assert!(app.filtered.is_empty());
         assert_eq!(app.table_state.selected(), None);
+    }
+
+    #[test]
+    fn move_first_and_last() {
+        let mut app = App::new(vec![
+            proc(1, "a", vec![]),
+            proc(2, "b", vec![]),
+            proc(3, "c", vec![]),
+        ]);
+        app.move_last();
+        assert_eq!(app.cursor, 2);
+        app.move_first();
+        assert_eq!(app.cursor, 0);
+    }
+
+    #[test]
+    fn move_page_down_caps_at_end() {
+        let mut app = App::new(vec![
+            proc(1, "a", vec![]),
+            proc(2, "b", vec![]),
+            proc(3, "c", vec![]),
+            proc(4, "d", vec![]),
+        ]);
+        app.set_viewport_rows(2);
+        app.move_page_down(2);
+        assert_eq!(app.cursor, 2);
+        app.move_page_down(2);
+        assert_eq!(app.cursor, 3);
+    }
+
+    #[test]
+    fn kill_preview_single_process() {
+        let mut app = App::new(vec![ProcessInfo {
+            pid: 4812,
+            ppid: 1,
+            name: "node".into(),
+            cpu: 0.0,
+            memory_bytes: 0,
+            ports: vec![3000],
+            command: Some("./node_modules/.bin/vite".into()),
+            cwd: None,
+            run_time_secs: 0,
+            is_zombie: false,
+        }]);
+        app.refilter();
+        let preview = app.format_kill_preview(false);
+        assert!(preview.contains("node"));
+        assert!(preview.contains("4812"));
+        assert!(preview.contains(":3000"));
+    }
+
+    #[test]
+    fn kill_preview_multi_select() {
+        let mut app = App::new(vec![proc(1, "a", vec![]), proc(2, "b", vec![])]);
+        app.selected.insert(1);
+        app.selected.insert(2);
+        let preview = app.format_kill_preview(true);
+        assert!(preview.contains("2 selected"));
+        assert!(preview.contains("descendants"));
     }
 }

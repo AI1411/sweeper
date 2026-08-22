@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -59,7 +59,7 @@ pub fn run() -> anyhow::Result<()> {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
-                if handle_key(&mut app, key.code, &tx)? {
+                if handle_key(&mut app, key, &tx, &mut terminal)? {
                     break Ok(());
                 }
             }
@@ -90,7 +90,13 @@ fn spawn_port_loader(tx: mpsc::Sender<Msg>) {
     });
 }
 
-fn handle_key(app: &mut App, code: KeyCode, tx: &mpsc::Sender<Msg>) -> anyhow::Result<bool> {
+fn handle_key(
+    app: &mut App,
+    key: KeyEvent,
+    tx: &mpsc::Sender<Msg>,
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+) -> anyhow::Result<bool> {
+    let code = key.code;
     if app.searching {
         match code {
             KeyCode::Esc => {
@@ -112,6 +118,20 @@ fn handle_key(app: &mut App, code: KeyCode, tx: &mpsc::Sender<Msg>) -> anyhow::R
         return Ok(false);
     }
 
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        match code {
+            KeyCode::Char('u') | KeyCode::Char('U') => {
+                app.move_page_up(app.viewport_rows);
+                return Ok(false);
+            }
+            KeyCode::Char('d') | KeyCode::Char('D') => {
+                app.move_page_down(app.viewport_rows);
+                return Ok(false);
+            }
+            _ => {}
+        }
+    }
+
     match code {
         KeyCode::Char('q') | KeyCode::Esc => {
             app.should_quit = true;
@@ -122,11 +142,15 @@ fn handle_key(app: &mut App, code: KeyCode, tx: &mpsc::Sender<Msg>) -> anyhow::R
         }
         KeyCode::Up => app.move_up(),
         KeyCode::Down | KeyCode::Char('j') => app.move_down(),
+        KeyCode::PageUp => app.move_page_up(app.viewport_rows),
+        KeyCode::PageDown => app.move_page_down(app.viewport_rows),
+        KeyCode::Char('g') => app.move_first(),
+        KeyCode::Char('G') => app.move_last(),
         KeyCode::Char(' ') => app.toggle_select_current(),
-        KeyCode::Char('k') => kill_selection(app, false, false)?,
-        KeyCode::Char('K') => kill_selection(app, true, false)?,
-        KeyCode::Char('t') => kill_selection(app, false, true)?,
-        KeyCode::Char('T') => kill_selection(app, true, true)?,
+        KeyCode::Char('k') => preview_and_kill(app, terminal, false, false)?,
+        KeyCode::Char('K') => preview_and_kill(app, terminal, true, false)?,
+        KeyCode::Char('t') => preview_and_kill(app, terminal, false, true)?,
+        KeyCode::Char('T') => preview_and_kill(app, terminal, true, true)?,
         KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('r') => {
             app.refresh();
@@ -136,6 +160,18 @@ fn handle_key(app: &mut App, code: KeyCode, tx: &mpsc::Sender<Msg>) -> anyhow::R
         _ => {}
     }
     Ok(false)
+}
+
+fn preview_and_kill(
+    app: &mut App,
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+    force: bool,
+    tree: bool,
+) -> anyhow::Result<()> {
+    app.status = app.format_kill_preview(tree);
+    terminal.draw(|frame| ui::draw(frame, app))?;
+    kill_selection(app, force, tree)?;
+    Ok(())
 }
 
 fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> {
