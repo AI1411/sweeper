@@ -117,6 +117,7 @@ fn kill_named(groups: &[ProjectGroup], query: &str, force: bool) -> anyhow::Resu
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
+    let mut outcomes = Vec::new();
     for p in &g.processes {
         let mut use_force = force;
         let mut outcome = kill_pid(p.pid, &p.name, use_force)?;
@@ -146,6 +147,12 @@ fn kill_named(groups: &[ProjectGroup], query: &str, force: bool) -> anyhow::Resu
             style::pid(p.pid),
             style::kill_outcome(outcome)
         );
+        outcomes.push((p.memory_bytes, outcome));
     }
+    let ok = outcomes
+        .iter()
+        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
+        .count();
+    crate::report::print_summary(ok, crate::report::freed_bytes(&outcomes));
     Ok(())
 }

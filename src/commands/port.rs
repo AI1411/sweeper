@@ -122,6 +122,7 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
+    let mut outcomes = Vec::new();
     for pid in kill_pids {
         let target = targets.iter().find(|t| t.pid == pid);
         let info = procs.iter().find(|p| p.pid == pid);
@@ -129,6 +130,10 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
             .map(|p| p.name.as_str())
             .or_else(|| target.and_then(|t| t.info.as_ref().map(|p| p.name.as_str())))
             .unwrap_or("?");
+        let mem = info
+            .map(|p| p.memory_bytes)
+            .or_else(|| target.and_then(|t| t.info.as_ref().map(|p| p.memory_bytes)))
+            .unwrap_or(0);
         let ports_rec = target
             .map(|t| t.ports.clone())
             .or_else(|| info.map(|p| p.ports.clone()))
@@ -159,6 +164,12 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
             style::pid(pid),
             style::kill_outcome(outcome)
         );
+        outcomes.push((mem, outcome));
     }
+    let ok = outcomes
+        .iter()
+        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
+        .count();
+    crate::report::print_summary(ok, crate::report::freed_bytes(&outcomes));
     Ok(())
 }

@@ -41,6 +41,7 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
+    let mut outcomes = Vec::new();
     for c in proposals {
         let p = c.process;
         if !confirm(&format!("Kill {} (pid {})?", p.name, p.pid))? {
@@ -71,6 +72,12 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
             style::pid(p.pid),
             style::kill_outcome(outcome)
         );
+        outcomes.push((p.memory_bytes, outcome));
     }
+    let ok = outcomes
+        .iter()
+        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
+        .count();
+    crate::report::print_summary(ok, crate::report::freed_bytes(&outcomes));
     Ok(())
 }

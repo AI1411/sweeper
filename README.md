@@ -95,6 +95,7 @@ Launch with bare `sw`.
 - Critical macOS process names are protected from kill.
 - `sw clean` never auto-kills — it proposes; you decide.
 - There is no `-y` / `--yes` skip for confirmations.
+- After kills, Sweeper prints an **estimated** memory freed total from the pre-kill snapshot (not proof of OS reclaim).
 
 ## Colors
 
