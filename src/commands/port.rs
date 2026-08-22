@@ -153,7 +153,7 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
         let _ = append_entry(HistoryEntry::new(
             pid,
             name,
-            ports_rec,
+            ports_rec.clone(),
             signal,
             format!("{outcome:?}"),
         ));
@@ -164,12 +164,8 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
             style::pid(pid),
             style::kill_outcome(outcome)
         );
-        outcomes.push((mem, outcome));
+        outcomes.push(crate::report::KillResult::new(mem, ports_rec, outcome));
     }
-    let ok = outcomes
-        .iter()
-        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
-        .count();
-    crate::report::print_summary(ok, crate::report::freed_bytes(&outcomes));
+    crate::report::print_kill_summary(&outcomes);
     Ok(())
 }
