@@ -1,4 +1,7 @@
-use crate::clean::{apply_excludes, excludes_from_env, propose_leftovers, summarize, CleanSummary};
+use crate::clean::{
+    apply_excludes, excludes_from_env, format_age, format_command_snippet, format_reasons_display,
+    propose_leftovers, summarize, CleanSummary,
+};
 use crate::commands::confirm::confirm;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
@@ -23,6 +26,7 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
     for c in &proposals {
         let p = &c.process;
         let age = format_age(p.run_time_secs);
+        let reasons = format_reasons_display(c);
         println!(
             "  {} {} {} {} {:?} {} {}  {} {}",
             style::process_name(&p.name),
@@ -33,8 +37,11 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
             style::dim("age"),
             style::dim(age),
             style::dim("reasons:"),
-            style::warn(c.reasons.join(", "))
+            style::warn(reasons.join(", "))
         );
+        if let Some(cmd) = format_command_snippet(p.command.as_deref()) {
+            println!("    {} {}", style::dim("cmd:"), style::dim(cmd));
+        }
     }
     if proposals.is_empty() {
         return Ok(());
@@ -144,14 +151,4 @@ fn print_summary_lines(summary: &CleanSummary, total: usize) {
         );
     }
     println!();
-}
-
-fn format_age(secs: u64) -> String {
-    if secs < 60 {
-        format!("{secs}s")
-    } else if secs < 3600 {
-        format!("{}m", secs / 60)
-    } else {
-        format!("{}h", secs / 3600)
-    }
 }

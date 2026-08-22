@@ -326,6 +326,56 @@ pub fn excludes_from_env() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Human-readable reason strings for CLI display (machine tags stay in `reasons`).
+pub fn format_reasons_display(c: &CleanCandidate) -> Vec<String> {
+    c.reasons
+        .iter()
+        .map(|tag| format_reason_tag(tag, &c.process))
+        .collect()
+}
+
+/// Truncate command line for display (default max 40 chars).
+pub fn format_command_snippet(command: Option<&str>) -> Option<String> {
+    const MAX: usize = 40;
+    command.map(|cmd| {
+        if cmd.len() <= MAX {
+            cmd.to_string()
+        } else {
+            format!("{}…", cmd.chars().take(MAX).collect::<String>())
+        }
+    })
+}
+
+pub fn format_age(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{}h", secs / 3600)
+    }
+}
+
+fn format_reason_tag(tag: &str, p: &ProcessInfo) -> String {
+    match tag {
+        "stale-server" => {
+            let age = format_age(p.run_time_secs);
+            match p.ports.first() {
+                Some(port) => format!("stale-server ({age} on :{port})"),
+                None => format!("stale-server ({age})"),
+            }
+        }
+        "idle-listener" => format!(
+            "idle-listener ({}m, CPU {:.1}%)",
+            p.run_time_secs / 60,
+            p.cpu
+        ),
+        "orphan-parent" => format!("orphan-parent (ppid {} missing)", p.ppid),
+        "orphan-ppid" => "orphan-ppid (launchd)".into(),
+        other => other.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -422,5 +472,39 @@ mod tests {
         let out = propose_leftovers(&procs, &listening);
         assert_eq!(out.len(), 1);
         assert!(out[0].reasons.iter().any(|r| r == "orphan-parent"));
+    }
+
+    #[test]
+    fn formats_stale_server_reason_with_port() {
+        let c = CleanCandidate {
+            process: proc_with(1, 50, "node", 0.0, STALE_SERVER_SECS, vec![3000], None),
+            reasons: vec!["stale-server".into()],
+        };
+        let out = format_reasons_display(&c);
+        assert_eq!(
+            out[0],
+            format!("stale-server ({}h on :3000)", STALE_SERVER_SECS / 3600)
+        );
+    }
+
+    #[test]
+    fn formats_idle_listener_reason() {
+        let c = CleanCandidate {
+            process: proc_with(1, 50, "node", 0.1, IDLE_LISTENER_SECS, vec![3000], None),
+            reasons: vec!["idle-listener".into()],
+        };
+        let out = format_reasons_display(&c);
+        assert_eq!(
+            out[0],
+            format!("idle-listener ({}m, CPU 0.1%)", IDLE_LISTENER_SECS / 60)
+        );
+    }
+
+    #[test]
+    fn truncates_command_snippet() {
+        let long = "node ./node_modules/.bin/vite --port 3000 --host";
+        let s = format_command_snippet(Some(long)).unwrap();
+        assert!(s.chars().count() <= 41);
+        assert!(s.ends_with('…'));
     }
 }
