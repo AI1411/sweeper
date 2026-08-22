@@ -97,6 +97,21 @@ fn handle_key(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
 ) -> anyhow::Result<bool> {
     let code = key.code;
+    if app.is_confirming_kill() {
+        match code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                if let Some(pending) = app.take_pending_kill() {
+                    kill_selection(app, pending.force, pending.tree)?;
+                }
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                app.cancel_kill_confirm();
+            }
+            _ => {}
+        }
+        return Ok(false);
+    }
+
     if app.searching {
         match code {
             KeyCode::Esc => {
@@ -147,10 +162,10 @@ fn handle_key(
         KeyCode::Char('g') => app.move_first(),
         KeyCode::Char('G') => app.move_last(),
         KeyCode::Char(' ') => app.toggle_select_current(),
-        KeyCode::Char('k') => preview_and_kill(app, terminal, false, false)?,
-        KeyCode::Char('K') => preview_and_kill(app, terminal, true, false)?,
-        KeyCode::Char('t') => preview_and_kill(app, terminal, false, true)?,
-        KeyCode::Char('T') => preview_and_kill(app, terminal, true, true)?,
+        KeyCode::Char('k') => request_kill_preview(app, terminal, false, false)?,
+        KeyCode::Char('K') => request_kill_preview(app, terminal, true, false)?,
+        KeyCode::Char('t') => request_kill_preview(app, terminal, false, true)?,
+        KeyCode::Char('T') => request_kill_preview(app, terminal, true, true)?,
         KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('r') => {
             app.refresh();
@@ -162,15 +177,14 @@ fn handle_key(
     Ok(false)
 }
 
-fn preview_and_kill(
+fn request_kill_preview(
     app: &mut App,
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     force: bool,
     tree: bool,
 ) -> anyhow::Result<()> {
-    app.status = app.format_kill_preview(tree);
+    app.request_kill_confirm(force, tree);
     terminal.draw(|frame| ui::draw(frame, app))?;
-    kill_selection(app, force, tree)?;
     Ok(())
 }
 

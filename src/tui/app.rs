@@ -4,6 +4,13 @@ use ratatui::widgets::TableState;
 
 use crate::process::ProcessInfo;
 
+/// Kill parameters awaiting TUI confirmation ([y/N]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PendingKill {
+    pub force: bool,
+    pub tree: bool,
+}
+
 pub struct App {
     pub processes: Vec<ProcessInfo>,
     pub filtered: Vec<usize>,
@@ -19,6 +26,8 @@ pub struct App {
     pub table_state: TableState,
     /// Visible table body rows (updated each draw for page navigation).
     pub viewport_rows: usize,
+    /// When set, kill keys showed a preview and await `y` / `n` / Esc.
+    pub confirming_kill: Option<PendingKill>,
 }
 
 impl App {
@@ -36,9 +45,33 @@ impl App {
             last_ports: Vec::new(),
             table_state: TableState::default(),
             viewport_rows: 20,
+            confirming_kill: None,
         };
         app.refilter();
         app
+    }
+
+    pub fn request_kill_confirm(&mut self, force: bool, tree: bool) {
+        if self.pids_to_kill().is_empty() {
+            self.status = "Nothing to kill".into();
+            self.confirming_kill = None;
+            return;
+        }
+        self.confirming_kill = Some(PendingKill { force, tree });
+        self.status = format!("{} | Confirm kill? [y/N]", self.format_kill_preview(tree));
+    }
+
+    pub fn cancel_kill_confirm(&mut self) {
+        self.confirming_kill = None;
+        self.status = "Kill cancelled".into();
+    }
+
+    pub fn take_pending_kill(&mut self) -> Option<PendingKill> {
+        self.confirming_kill.take()
+    }
+
+    pub fn is_confirming_kill(&self) -> bool {
+        self.confirming_kill.is_some()
     }
 
     pub fn sync_table_state(&mut self) {
@@ -384,5 +417,52 @@ mod tests {
         let preview = app.format_kill_preview(true);
         assert!(preview.contains("2 selected"));
         assert!(preview.contains("descendants"));
+    }
+
+    #[test]
+    fn request_kill_confirm_sets_pending() {
+        let mut app = App::new(vec![proc(1, "node", vec![3000])]);
+        app.request_kill_confirm(false, true);
+        assert!(app.is_confirming_kill());
+        assert_eq!(
+            app.confirming_kill,
+            Some(PendingKill {
+                force: false,
+                tree: true
+            })
+        );
+        assert!(app.status.contains("Confirm kill?"));
+    }
+
+    #[test]
+    fn request_kill_confirm_empty_clears_pending() {
+        let mut app = App::new(vec![]);
+        app.request_kill_confirm(false, false);
+        assert!(!app.is_confirming_kill());
+        assert_eq!(app.status, "Nothing to kill");
+    }
+
+    #[test]
+    fn cancel_kill_confirm_clears_pending() {
+        let mut app = App::new(vec![proc(1, "a", vec![])]);
+        app.request_kill_confirm(true, false);
+        app.cancel_kill_confirm();
+        assert!(!app.is_confirming_kill());
+        assert_eq!(app.status, "Kill cancelled");
+    }
+
+    #[test]
+    fn take_pending_kill_consumes_state() {
+        let mut app = App::new(vec![proc(1, "a", vec![])]);
+        app.request_kill_confirm(true, true);
+        let pending = app.take_pending_kill();
+        assert_eq!(
+            pending,
+            Some(PendingKill {
+                force: true,
+                tree: true
+            })
+        );
+        assert!(!app.is_confirming_kill());
     }
 }
