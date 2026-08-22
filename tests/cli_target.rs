@@ -78,3 +78,47 @@ fn force_flag() {
     assert!(cli.force);
     assert_eq!(cli.target, Target::Ports(vec![3000]));
 }
+
+#[test]
+fn force_flag_before_target() {
+    let cli = Cli::parse_from(["sw", "--force", "node"]);
+    assert!(cli.force);
+    assert_eq!(cli.target, Target::Name("node".into()));
+}
+
+#[test]
+fn tree_flag() {
+    let cli = Cli::parse_from(["sw", "node", "--tree"]);
+    assert!(cli.tree);
+    assert_eq!(cli.target, Target::Name("node".into()));
+}
+
+#[test]
+fn subcommand_ports() {
+    let cli = Cli::parse_from(["sw", "ports"]);
+    assert_eq!(cli.target, Target::Sub(SubCommand::Ports));
+}
+
+#[test]
+fn subcommand_clean() {
+    let cli = Cli::parse_from(["sw", "clean"]);
+    assert_eq!(cli.target, Target::Sub(SubCommand::Clean));
+}
+
+#[test]
+fn subcommand_history_default() {
+    let cli = Cli::parse_from(["sw", "history"]);
+    assert_eq!(cli.target, Target::Sub(SubCommand::History { last: false }));
+}
+
+#[test]
+fn mixed_name_and_port_uses_first_name() {
+    let cli = Cli::parse_from(["sw", "node", ":3000"]);
+    assert_eq!(cli.target, Target::Name("node".into()));
+}
+
+#[test]
+fn invalid_port_like_token_treated_as_name() {
+    let cli = Cli::parse_from(["sw", ":notaport"]);
+    assert_eq!(cli.target, Target::Name(":notaport".into()));
+}

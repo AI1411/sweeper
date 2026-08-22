@@ -38,17 +38,19 @@ pub fn list_processes() -> Vec<ProcessInfo> {
     out
 }
 
-pub fn find_by_name_fuzzy(query: &str) -> Vec<ProcessInfo> {
+/// Case-insensitive substring match against process name or command line.
+pub fn name_matches(query: &str, name: &str, command: Option<&str>) -> bool {
     let q = query.to_lowercase();
+    name.to_lowercase().contains(&q)
+        || command
+            .map(|c| c.to_lowercase().contains(&q))
+            .unwrap_or(false)
+}
+
+pub fn find_by_name_fuzzy(query: &str) -> Vec<ProcessInfo> {
     list_processes()
         .into_iter()
-        .filter(|p| {
-            p.name.to_lowercase().contains(&q)
-                || p.command
-                    .as_ref()
-                    .map(|c| c.to_lowercase().contains(&q))
-                    .unwrap_or(false)
-        })
+        .filter(|p| name_matches(query, &p.name, p.command.as_deref()))
         .collect()
 }
 
@@ -57,8 +59,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fuzzy_matches_substring() {
-        let all = list_processes();
-        assert!(!all.is_empty());
+    fn name_matches_process_name() {
+        assert!(name_matches("node", "node", None));
+        assert!(name_matches("NOD", "node", None));
+        assert!(!name_matches("python", "node", None));
+    }
+
+    #[test]
+    fn name_matches_command_line() {
+        assert!(name_matches(
+            "vite",
+            "node",
+            Some("/usr/bin/node ./node_modules/.bin/vite")
+        ));
+        assert!(!name_matches("vite", "node", Some("node server.js")));
+    }
+
+    #[test]
+    fn list_processes_returns_something() {
+        assert!(!list_processes().is_empty());
     }
 }
