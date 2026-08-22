@@ -8,6 +8,10 @@ pub struct ProcessInfo {
     pub ports: Vec<u16>,
     pub command: Option<String>,
     pub cwd: Option<String>,
+    /// Process uptime in seconds (from sysinfo snapshot).
+    pub run_time_secs: u64,
+    /// True when the kernel reports the process as zombie.
+    pub is_zombie: bool,
 }
 
 impl ProcessInfo {

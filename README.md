@@ -94,6 +94,7 @@ Launch with bare `sw`.
 - Default signal is **SIGTERM**. **SIGKILL** only with `--force` or TUI `K`.
 - Critical macOS process names are protected from kill.
 - `sw clean` never auto-kills — it proposes; you decide.
+- `sw clean` skips active dev servers; it flags orphans, stale/idle listeners, and zombies.
 - There is no `-y` / `--yes` skip for confirmations.
 - After kills, Sweeper prints an **estimated** memory freed total from the pre-kill snapshot (not proof of OS reclaim).
 

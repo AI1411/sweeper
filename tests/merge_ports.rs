@@ -11,6 +11,8 @@ fn proc(pid: u32, name: &str) -> ProcessInfo {
         ports: Vec::new(),
         command: None,
         cwd: None,
+        run_time_secs: 0,
+        is_zombie: false,
     }
 }
 

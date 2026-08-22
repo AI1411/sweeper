@@ -1,10 +1,11 @@
-use crate::clean::{apply_excludes, excludes_from_env, propose_leftovers};
+use crate::clean::{apply_excludes, excludes_from_env, propose_leftovers, summarize, CleanSummary};
 use crate::commands::confirm::confirm;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
+use crate::style as sty;
 
 pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
     let mut procs = list_processes();
@@ -15,21 +16,22 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
     excludes.extend(exclude.iter().cloned());
     proposals = apply_excludes(proposals, &excludes);
 
+    let summary = summarize(&proposals);
     println!("{}\n", style::header("Sweeper found possible leftovers:"));
-    println!(
-        "{} {} candidate processes",
-        style::success("✓"),
-        style::process_name(proposals.len())
-    );
+    print_summary_lines(&summary, proposals.len());
+
     for c in &proposals {
         let p = &c.process;
+        let age = format_age(p.run_time_secs);
         println!(
-            "  {} {} {} {} {:?}  {} {}",
+            "  {} {} {} {} {:?} {} {}  {} {}",
             style::process_name(&p.name),
             style::dim("pid"),
             style::pid(p.pid),
             style::dim("ports"),
             p.ports,
+            style::dim("age"),
+            style::dim(age),
             style::dim("reasons:"),
             style::warn(c.reasons.join(", "))
         );
@@ -80,4 +82,76 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
         .count();
     crate::report::print_summary(ok, crate::report::freed_bytes(&outcomes));
     Ok(())
+}
+
+fn print_summary_lines(summary: &CleanSummary, total: usize) {
+    if total == 0 {
+        println!("{} No leftover candidates right now.", style::dim("·"));
+        return;
+    }
+    println!(
+        "{} {} candidate process{}",
+        style::success("✓"),
+        style::process_name(total),
+        if total == 1 { "" } else { "es" }
+    );
+    if summary.stale_servers > 0 {
+        println!(
+            "{} {} stale dev server{}",
+            style::success("✓"),
+            summary.stale_servers,
+            if summary.stale_servers == 1 { "" } else { "s" }
+        );
+    }
+    if summary.orphans > 0 {
+        println!(
+            "{} {} orphan process{}",
+            style::success("✓"),
+            summary.orphans,
+            if summary.orphans == 1 { "" } else { "es" }
+        );
+    }
+    if summary.zombies > 0 {
+        println!(
+            "{} {} zombie process{}",
+            style::success("✓"),
+            summary.zombies,
+            if summary.zombies == 1 { "" } else { "es" }
+        );
+    }
+    if summary.idle_listeners > 0 {
+        println!(
+            "{} {} idle listener{}",
+            style::success("✓"),
+            summary.idle_listeners,
+            if summary.idle_listeners == 1 { "" } else { "s" }
+        );
+    }
+    if summary.listening > 0 {
+        println!(
+            "{} {} listening on dev port{}",
+            style::dim("·"),
+            summary.listening,
+            if summary.listening == 1 { "" } else { "s" }
+        );
+    }
+    if summary.estimated_bytes > 0 {
+        let mb = summary.estimated_bytes as f64 / (1024.0 * 1024.0);
+        println!(
+            "{} {}",
+            style::dim("Estimated memory reclaim:"),
+            sty::mem(format!("{mb:.0} MB"))
+        );
+    }
+    println!();
+}
+
+fn format_age(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{}h", secs / 3600)
+    }
 }
