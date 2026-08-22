@@ -48,6 +48,7 @@ Examples:
 ```bash
 sw node
 sw :3000 :3001
+sw :3000-3010
 sw ports
 sw top
 sw clean
