@@ -84,10 +84,11 @@ Launch with bare `sw`.
 | `Ctrl-u` / `Ctrl-d` | Page up / down |
 | `Space` | Select / deselect |
 | `/` | Search |
-| `k` | SIGTERM selected |
-| `K` | SIGKILL selected |
-| `t` | SIGTERM selected + descendants |
-| `T` | SIGKILL selected + descendants |
+| `k` | Preview SIGTERM selected; `y` confirms |
+| `K` | Preview SIGKILL selected; `y` confirms |
+| `t` | Preview SIGTERM + descendants; `y` confirms |
+| `T` | Preview SIGKILL + descendants; `y` confirms |
+| `y` / `n` / `Esc` | Confirm or cancel pending kill |
 | `p` | Toggle “listening ports only” filter |
 | `r` | Refresh processes and ports |
 | `q` | Quit |

@@ -176,7 +176,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             "[k]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" Kill  "),
+        Span::raw(" Kill→y  "),
         Span::styled(
             "[K]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
