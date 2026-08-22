@@ -1,5 +1,6 @@
 pub mod kill;
 pub mod list;
+pub mod plan;
 pub mod ports;
 pub mod protect;
 pub mod tree;

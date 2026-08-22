@@ -110,6 +110,13 @@ fn tree_flag() {
 }
 
 #[test]
+fn dry_run_flag() {
+    let cli = Cli::parse_from(["sw", ":3000", "--dry-run"]);
+    assert!(cli.dry_run);
+    assert_eq!(cli.target, Target::Ports(vec![3000]));
+}
+
+#[test]
 fn subcommand_ports() {
     let cli = Cli::parse_from(["sw", "ports"]);
     assert_eq!(cli.target, Target::Sub(SubCommand::Ports));

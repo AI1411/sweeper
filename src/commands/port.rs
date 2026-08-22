@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
+use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::pids_for_port;
 use crate::process::tree::collect_tree_pids;
 use crate::process::ProcessInfo;
@@ -57,7 +58,7 @@ fn collect_unique_targets(
     Ok((targets, unused))
 }
 
-pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
+pub fn run_ports(ports: &[u16], force: bool, tree: bool, dry_run: bool) -> anyhow::Result<()> {
     let procs = list_processes();
     let (targets, unused) = collect_unique_targets(&procs, ports)?;
 
@@ -106,6 +107,13 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
     }
 
     let root_pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
+
+    if dry_run {
+        let planned = plan_kills(&procs, &root_pids, tree);
+        print_dry_run(&planned, tree);
+        return Ok(());
+    }
+
     let kill_pids = if tree {
         collect_tree_pids(&procs, &root_pids)
     } else {
