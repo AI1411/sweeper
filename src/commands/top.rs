@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
+use crate::process::tree::collect_tree_pids;
 use crate::process::ProcessInfo;
 use crate::report;
 use crate::style;
@@ -16,23 +17,25 @@ pub fn run_top(force: bool, tree: bool, dry_run: bool) -> anyhow::Result<()> {
 
     println!("{}\n", style::header("CPU"));
     for (i, p) in cpu_leaders.iter().enumerate() {
-        print_leader(i + 1, p);
+        print_leader(i + 1, p, false);
     }
     println!("\n{}\n", style::header("MEMORY"));
     for (i, p) in mem_leaders.iter().enumerate() {
-        print_leader(i + 1, p);
+        print_leader(i + 1, p, true);
     }
 
-    let _ = tree;
     if dry_run {
         println!(
             "{}",
-            style::dim("Dry run: omit --dry-run to kill by rank interactively.")
+            style::dim("Dry run: omit --dry-run to kill by rank or PID interactively.")
         );
         return Ok(());
     }
 
-    print!("{} ", style::dim("Kill by rank [1-10], or q to skip:"));
+    print!(
+        "{} ",
+        style::dim("Kill by CPU rank [1-10], memory rank [m1-m10], PID, or q:")
+    );
     io::stdout().flush()?;
     let mut buf = String::new();
     io::stdin().read_line(&mut buf)?;
@@ -41,38 +44,50 @@ pub fn run_top(force: bool, tree: bool, dry_run: bool) -> anyhow::Result<()> {
         println!("{}", style::warn("Skipped."));
         return Ok(());
     }
-    let rank: usize = choice.parse().unwrap_or(0);
-    if !(1..=10).contains(&rank) {
-        println!("{}", style::warn("Invalid rank."));
-        return Ok(());
-    }
 
-    let pick = cpu_leaders
-        .get(rank - 1)
-        .or_else(|| mem_leaders.get(rank - 1));
+    let pick = resolve_selection(choice, &cpu_leaders, &mem_leaders, &procs);
     let p = match pick {
         Some(p) => p,
         None => {
-            println!("{}", style::warn("No process at that rank."));
+            println!("{}", style::warn("Invalid selection."));
             return Ok(());
         }
     };
 
-    if !confirm(&format!("Kill {} (pid {})?", p.name, p.pid))? {
+    let targets = expand_targets(&procs, p, tree);
+    if targets.is_empty() {
+        println!("{}", style::warn("No kill targets."));
+        return Ok(());
+    }
+
+    if !confirm(&format!(
+        "Kill {}{}?",
+        p.name,
+        if tree && targets.len() > 1 {
+            format!(" tree ({} processes)", targets.len())
+        } else {
+            format!(" (pid {})", p.pid)
+        }
+    ))? {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
 
-    let outcome = kill_one(p, force)?;
-    report::print_kill_summary(&[report::KillResult::new(
-        p.memory_bytes,
-        p.ports.clone(),
-        outcome,
-    )]);
+    let mut outcomes = Vec::new();
+    for target in targets {
+        let outcome = kill_one(&target, force)?;
+        outcomes.push(report::KillResult::new(
+            target.memory_bytes,
+            target.ports.clone(),
+            outcome,
+        ));
+    }
+    report::print_kill_summary(&outcomes);
     Ok(())
 }
 
-fn top_by_cpu(procs: &[ProcessInfo], n: usize) -> Vec<ProcessInfo> {
+/// Sort processes by CPU descending and take the top `n`.
+pub fn top_by_cpu(procs: &[ProcessInfo], n: usize) -> Vec<ProcessInfo> {
     let mut sorted = procs.to_vec();
     sorted.sort_by(|a, b| {
         b.cpu
@@ -82,16 +97,53 @@ fn top_by_cpu(procs: &[ProcessInfo], n: usize) -> Vec<ProcessInfo> {
     sorted.into_iter().take(n).collect()
 }
 
-fn top_by_memory(procs: &[ProcessInfo], n: usize) -> Vec<ProcessInfo> {
+/// Sort processes by memory descending and take the top `n`.
+pub fn top_by_memory(procs: &[ProcessInfo], n: usize) -> Vec<ProcessInfo> {
     let mut sorted = procs.to_vec();
     sorted.sort_by_key(|p| std::cmp::Reverse(p.memory_bytes));
     sorted.into_iter().take(n).collect()
 }
 
-fn print_leader(rank: usize, p: &ProcessInfo) {
+/// Resolve interactive selection: CPU rank `1-10`, memory rank `m1-m10`, or PID.
+pub fn resolve_selection<'a>(
+    choice: &str,
+    cpu_leaders: &'a [ProcessInfo],
+    mem_leaders: &'a [ProcessInfo],
+    all: &'a [ProcessInfo],
+) -> Option<&'a ProcessInfo> {
+    let lower = choice.to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix('m') {
+        let rank: usize = rest.parse().ok()?;
+        return mem_leaders.get(rank.checked_sub(1)?);
+    }
+    if let Ok(rank) = lower.parse::<usize>() {
+        if (1..=10).contains(&rank) {
+            return cpu_leaders.get(rank - 1);
+        }
+        return all.iter().find(|p| p.pid == rank as u32);
+    }
+    None
+}
+
+fn expand_targets(all: &[ProcessInfo], root: &ProcessInfo, tree: bool) -> Vec<ProcessInfo> {
+    if !tree {
+        return vec![root.clone()];
+    }
+    let pids = collect_tree_pids(all, &[root.pid]);
+    pids.iter()
+        .filter_map(|pid| all.iter().find(|p| p.pid == *pid).cloned())
+        .collect()
+}
+
+fn print_leader(rank: usize, p: &ProcessInfo, memory_list: bool) {
+    let label = if memory_list {
+        format!("m{rank}.")
+    } else {
+        format!("{rank}.")
+    };
     println!(
         "{} {}  pid {}  {}",
-        style::rank(rank),
+        style::dim(label),
         style::process_name(&p.name),
         style::pid(p.pid),
         style::mem(format!("{:.0} MB", p.memory_mb()))
@@ -128,4 +180,74 @@ fn kill_one(p: &ProcessInfo, force: bool) -> anyhow::Result<KillOutcome> {
         style::kill_outcome(outcome)
     );
     Ok(outcome)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn proc(pid: u32, cpu: f32, mem: u64) -> ProcessInfo {
+        ProcessInfo {
+            pid,
+            ppid: 1,
+            name: format!("p{pid}"),
+            cpu,
+            memory_bytes: mem,
+            ports: vec![],
+            command: None,
+            cwd: None,
+            run_time_secs: 0,
+            is_zombie: false,
+        }
+    }
+
+    #[test]
+    fn top_by_cpu_orders_descending() {
+        let procs = vec![proc(1, 1.0, 100), proc(2, 5.0, 100), proc(3, 3.0, 100)];
+        let top = top_by_cpu(&procs, 2);
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0].pid, 2);
+        assert_eq!(top[1].pid, 3);
+    }
+
+    #[test]
+    fn top_by_memory_orders_descending() {
+        let procs = vec![proc(1, 0.0, 100), proc(2, 0.0, 500), proc(3, 0.0, 300)];
+        let top = top_by_memory(&procs, 2);
+        assert_eq!(top[0].pid, 2);
+        assert_eq!(top[1].pid, 3);
+    }
+
+    #[test]
+    fn resolve_cpu_rank() {
+        let procs = vec![proc(10, 1.0, 100), proc(20, 2.0, 200)];
+        let cpu = top_by_cpu(&procs, 10);
+        let mem = top_by_memory(&procs, 10);
+        assert_eq!(resolve_selection("2", &cpu, &mem, &procs).unwrap().pid, 10);
+    }
+
+    #[test]
+    fn resolve_memory_rank() {
+        let procs = vec![proc(10, 1.0, 100), proc(20, 2.0, 200)];
+        let cpu = top_by_cpu(&procs, 10);
+        let mem = top_by_memory(&procs, 10);
+        assert_eq!(resolve_selection("m1", &cpu, &mem, &procs).unwrap().pid, 20);
+    }
+
+    #[test]
+    fn resolve_pid() {
+        let procs = vec![proc(42, 1.0, 100)];
+        let cpu = top_by_cpu(&procs, 10);
+        let mem = top_by_memory(&procs, 10);
+        assert_eq!(resolve_selection("42", &cpu, &mem, &procs).unwrap().pid, 42);
+    }
+
+    #[test]
+    fn resolve_invalid_returns_none() {
+        let procs = vec![proc(1, 1.0, 100)];
+        let cpu = top_by_cpu(&procs, 10);
+        let mem = top_by_memory(&procs, 10);
+        assert!(resolve_selection("q", &cpu, &mem, &procs).is_none());
+        assert!(resolve_selection("m99", &cpu, &mem, &procs).is_none());
+    }
 }

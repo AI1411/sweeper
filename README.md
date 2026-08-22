@@ -35,7 +35,7 @@ sw project app  # inspect / kill a project
 | `sw <name>` | — | Fuzzy search by process name |
 | `sw :<port>` | — | Find process(es) by port (repeatable) |
 | `sw ports` | `p` | List LISTEN ports with process and PID |
-| `sw top` | `t` | Top processes by CPU and memory |
+| `sw top` | `t` | Top processes by CPU and memory; interactive kill by rank or PID |
 | `sw clean` | `c` | Propose leftover candidates; confirm before kill |
 
 `sw clean --exclude <pattern>` skips candidates whose name or PID contains the pattern (repeatable).  
@@ -50,7 +50,7 @@ sw node
 sw :3000 :3001
 sw :3000-3010
 sw ports
-sw top
+sw top          # then enter rank (1-10), memory rank (m1-m10), or PID to kill
 sw clean
 sw history --last
 sw project
