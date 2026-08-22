@@ -1,47 +1,98 @@
-# sweeper
+# Sweeper
 
-Sweep unwanted processes away.
+**Sweep unwanted processes away.**
 
-Developer-focused CLI/TUI for finding and safely terminating leftover processes on macOS (Linux works for most commands).
+A developer-focused CLI/TUI for finding leftover processes and terminating them safely. Built for macOS; most commands also work on Linux.
 
-## Install (dev)
+Binary name: `sw`
+
+## Install
 
 ```bash
 cargo install --path .
 ```
 
-Binary name: `sw`
-
-## Usage
+## Quick start
 
 ```bash
-sw           # TUI process browser
-sw node      # find by name
-sw :3000     # find by port
-sw ports     # list LISTEN ports (alias: p)
-sw top       # CPU / memory leaders (alias: t)
-sw clean     # propose leftovers (you confirm) (alias: c)
-sw history   # kill history (alias: h)
-sw history --last
-sw :3000 --force
+sw              # open the TUI process browser
+sw node         # find processes by name
+sw :3000        # find whatever is listening on a port
+sw p            # list listening ports
+sw t            # show CPU / memory leaders
+sw c            # propose leftovers (you confirm each kill)
+sw h            # show kill history
+sw h --last     # show the most recent kill
 ```
 
-Short aliases: `sw p`, `sw t`, `sw c`, `sw h`, `sw proj`.
+## Commands
 
-### TUI keys
+| Command | Alias | Description |
+| --- | --- | --- |
+| `sw` | — | Interactive TUI process browser |
+| `sw <name>` | — | Fuzzy search by process name |
+| `sw :<port>` | — | Find process(es) by port (repeatable) |
+| `sw ports` | `p` | List LISTEN ports with process and PID |
+| `sw top` | `t` | Top processes by CPU and memory |
+| `sw clean` | `c` | Propose leftover candidates; confirm before kill |
+| `sw history` | `h` | Kill history (`--last` for one entry) |
+| `sw project` | `proj` | Not implemented yet |
+
+Examples:
+
+```bash
+sw node
+sw :3000 :3001
+sw ports
+sw top
+sw clean
+sw history --last
+```
+
+## Options
+
+| Flag | Description |
+| --- | --- |
+| `--force` | Allow SIGKILL when a process does not exit after SIGTERM |
+| `--tree` | Accepted in MVP; tree kill behavior is still a stub |
+| `-h`, `--help` | Print help |
+
+Flags may appear before or after targets:
+
+```bash
+sw :3000 --force
+sw --force node
+```
+
+## TUI
+
+Launch with bare `sw`.
 
 | Key | Action |
-|---|---|
-| ↑ / ↓ | Move |
-| Space | Select / deselect |
+| --- | --- |
+| `↑` / `↓` | Move |
+| `Space` | Select / deselect |
 | `/` | Search |
-| `k` | SIGTERM |
-| `K` | SIGKILL |
+| `k` | SIGTERM selected |
+| `K` | SIGKILL selected |
 | `r` | Refresh |
 | `q` | Quit |
 
 ## Safety
 
-- Default signal is SIGTERM; SIGKILL only with `--force` or TUI `K`
-- Critical macOS process names are protected
-- `sw clean` never auto-kills — it proposes, you decide
+- Default signal is **SIGTERM**. **SIGKILL** only with `--force` or TUI `K`.
+- Critical macOS process names are protected from kill.
+- `sw clean` never auto-kills — it proposes; you decide.
+- There is no `-y` / `--yes` skip for confirmations.
+
+## Colors
+
+CLI and TUI use color when stdout is a TTY. Set `NO_COLOR` to disable.
+
+## Development
+
+```bash
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all -- --check
+```
