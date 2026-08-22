@@ -74,47 +74,17 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
     let header = Row::new(vec!["", "PID", "PROCESS", "PORT", "CPU", "MEM"])
         .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
 
-    let rows: Vec<Row> = app
-        .filtered
-        .iter()
-        .map(|&pi| {
-            let p = &app.processes[pi];
-            let mark = if app.selected.contains(&p.pid) {
-                "*"
-            } else {
-                " "
-            };
-            let ports = if p.ports.is_empty() {
-                "-".to_string()
-            } else {
-                p.ports
-                    .iter()
-                    .map(|port| format!(":{port}"))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            };
-            let cpu_style = if p.cpu >= 50.0 {
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-            } else if p.cpu >= 20.0 {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(Color::Green)
-            };
-            let row = Row::new(vec![
-                Cell::from(mark),
-                Cell::from(p.pid.to_string()).style(Style::default().fg(MUTED)),
-                Cell::from(p.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
-                Cell::from(ports).style(Style::default().fg(PORT)),
-                Cell::from(format!("{:.1}%", p.cpu)).style(cpu_style),
-                Cell::from(format!("{:.0} MB", p.memory_mb())).style(Style::default().fg(MEM)),
-            ]);
-            if app.selected.contains(&p.pid) {
-                row.style(Style::default().fg(Color::LightCyan))
-            } else {
-                row
-            }
-        })
-        .collect();
+    let rows: Vec<Row> = if app.tree_view {
+        app.tree_rows
+            .iter()
+            .map(|tr| process_row(&app.processes[tr.process_index], app, &tr.prefix))
+            .collect()
+    } else {
+        app.filtered
+            .iter()
+            .map(|&pi| process_row(&app.processes[pi], app, ""))
+            .collect()
+    };
 
     let table = Table::new(
         rows,
@@ -148,12 +118,59 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
     frame.render_stateful_widget(table, area, &mut app.table_state);
 }
 
-fn table_title(app: &App) -> String {
-    let total = app.filtered.len();
-    if total == 0 {
-        " Processes ".to_string()
+fn process_row<'a>(p: &crate::process::ProcessInfo, app: &App, prefix: &str) -> Row<'a> {
+    let mark = if app.selected.contains(&p.pid) {
+        "*"
     } else {
-        format!(" Processes [{} / {}] ", app.cursor + 1, total)
+        " "
+    };
+    let ports = if p.ports.is_empty() {
+        "-".into()
+    } else {
+        p.ports
+            .iter()
+            .map(|port| format!(":{port}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let cpu_style = if p.cpu >= 50.0 {
+        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+    } else if p.cpu >= 20.0 {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::Green)
+    };
+    let name = if prefix.is_empty() {
+        p.name.clone()
+    } else {
+        format!("{prefix}{}", p.name)
+    };
+    let row = Row::new(vec![
+        Cell::from(mark),
+        Cell::from(p.pid.to_string()).style(Style::default().fg(MUTED)),
+        Cell::from(name).style(Style::default().add_modifier(Modifier::BOLD)),
+        Cell::from(ports).style(Style::default().fg(PORT)),
+        Cell::from(format!("{:.1}%", p.cpu)).style(cpu_style),
+        Cell::from(format!("{:.0} MB", p.memory_mb())).style(Style::default().fg(MEM)),
+    ]);
+    if app.selected.contains(&p.pid) {
+        row.style(Style::default().fg(Color::LightCyan))
+    } else {
+        row
+    }
+}
+
+fn table_title(app: &App) -> String {
+    let total = if app.tree_view {
+        app.tree_rows.len()
+    } else {
+        app.filtered.len()
+    };
+    let mode = if app.tree_view { " tree " } else { " " };
+    if total == 0 {
+        format!(" Processes{mode}")
+    } else {
+        format!(" Processes{mode}[{} / {}] ", app.cursor + 1, total)
     }
 }
 
@@ -222,6 +239,11 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Ports  "),
+        Span::styled(
+            "[e]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Tree view  "),
         Span::styled(
             "[i]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),

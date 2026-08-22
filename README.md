@@ -92,7 +92,8 @@ Launch with bare `sw`.
 | `T` | Preview SIGKILL + descendants; `y` confirms |
 | `y` / `n` / `Esc` | Confirm or cancel pending kill |
 | `p` | Toggle “listening ports only” filter |
-| `i` / `Enter` | Toggle process detail panel |
+| `P` | Toggle project grouping view |
+| `i` / `Enter` | Toggle process detail panel (Enter expands project in project view) |
 | `r` | Refresh processes and ports |
 | `q` | Quit |
 

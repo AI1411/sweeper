@@ -10,6 +10,28 @@ pub struct ProjectGroup {
     pub processes: Vec<ProcessInfo>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectSummary {
+    pub process_count: usize,
+    pub memory_bytes: u64,
+    pub ports: Vec<u16>,
+}
+
+pub fn summarize_group(group: &ProjectGroup) -> ProjectSummary {
+    let mut ports: Vec<u16> = group
+        .processes
+        .iter()
+        .flat_map(|p| p.ports.iter().copied())
+        .collect();
+    ports.sort_unstable();
+    ports.dedup();
+    ProjectSummary {
+        process_count: group.processes.len(),
+        memory_bytes: group.processes.iter().map(|p| p.memory_bytes).sum(),
+        ports,
+    }
+}
+
 /// Infer (project_name, project_path) from cwd or command line.
 pub fn infer_project(proc: &ProcessInfo) -> Option<(String, String)> {
     if let Some(cwd) = proc.cwd.as_deref() {
@@ -213,5 +235,23 @@ mod tests {
         let hits = find_projects_by_name(&groups, "my-app");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].name, "my-app");
+    }
+
+    #[test]
+    fn summarize_group_totals() {
+        let mut p1 = proc(1, "node", Some("/Users/me/app"), None);
+        p1.memory_bytes = 100;
+        p1.ports = vec![3000];
+        let mut p2 = proc(2, "vite", Some("/Users/me/app"), None);
+        p2.memory_bytes = 200;
+        let group = ProjectGroup {
+            name: "app".into(),
+            path: "/Users/me/app".into(),
+            processes: vec![p1, p2],
+        };
+        let s = summarize_group(&group);
+        assert_eq!(s.process_count, 2);
+        assert_eq!(s.memory_bytes, 300);
+        assert_eq!(s.ports, vec![3000]);
     }
 }

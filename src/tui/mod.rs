@@ -176,6 +176,7 @@ fn handle_key(
         KeyCode::Char('t') => request_kill_preview(app, terminal, false, true)?,
         KeyCode::Char('T') => request_kill_preview(app, terminal, true, true)?,
         KeyCode::Char('p') => app.toggle_ports_only(),
+        KeyCode::Char('e') => app.toggle_tree_view(),
         KeyCode::Char('r') => {
             app.refresh();
             app.status = "Refreshing processes + ports…".into();

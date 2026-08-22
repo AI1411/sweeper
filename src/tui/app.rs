@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use ratatui::widgets::TableState;
 
+use crate::process::tree::{layout_tree_rows, TreeRow};
 use crate::process::ProcessInfo;
 
 /// Kill parameters awaiting TUI confirmation ([y/N]).
@@ -30,6 +31,8 @@ pub struct App {
     pub confirming_kill: Option<PendingKill>,
     /// Process detail panel for the current row.
     pub show_detail: bool,
+    pub tree_view: bool,
+    pub tree_rows: Vec<TreeRow>,
 }
 
 impl App {
@@ -49,6 +52,8 @@ impl App {
             viewport_rows: 20,
             confirming_kill: None,
             show_detail: false,
+            tree_view: false,
+            tree_rows: Vec::new(),
         };
         app.refilter();
         app
@@ -85,10 +90,43 @@ impl App {
         }
     }
 
+    pub fn toggle_tree_view(&mut self) {
+        self.tree_view = !self.tree_view;
+        self.rebuild_tree_rows();
+        self.cursor = 0;
+        self.status = if self.tree_view {
+            "View: process tree (e to flat list)".into()
+        } else {
+            "View: flat list".into()
+        };
+    }
+
+    pub fn rebuild_tree_rows(&mut self) {
+        if self.tree_view {
+            self.tree_rows = layout_tree_rows(&self.processes, &self.filtered);
+        } else {
+            self.tree_rows.clear();
+        }
+    }
+
+    fn display_len(&self) -> usize {
+        if self.tree_view {
+            self.tree_rows.len()
+        } else {
+            self.filtered.len()
+        }
+    }
+
     pub fn current_process(&self) -> Option<&ProcessInfo> {
-        self.filtered
-            .get(self.cursor)
-            .and_then(|i| self.processes.get(*i))
+        if self.tree_view {
+            self.tree_rows
+                .get(self.cursor)
+                .and_then(|row| self.processes.get(row.process_index))
+        } else {
+            self.filtered
+                .get(self.cursor)
+                .and_then(|i| self.processes.get(*i))
+        }
     }
 
     /// Multi-line detail text for the current row.
@@ -150,7 +188,7 @@ impl App {
     }
 
     pub fn sync_table_state(&mut self) {
-        if self.filtered.is_empty() {
+        if self.display_len() == 0 {
             self.table_state.select(None);
         } else {
             self.table_state.select(Some(self.cursor));
@@ -189,14 +227,18 @@ impl App {
         if self.filtered.is_empty() {
             self.cursor = 0;
         }
+        self.rebuild_tree_rows();
+        if self.tree_view && self.cursor >= self.tree_rows.len() && !self.tree_rows.is_empty() {
+            self.cursor = self.tree_rows.len() - 1;
+        }
+        if self.tree_view && self.tree_rows.is_empty() {
+            self.cursor = 0;
+        }
         self.sync_table_state();
     }
 
     pub fn current_pid(&self) -> Option<u32> {
-        self.filtered
-            .get(self.cursor)
-            .and_then(|i| self.processes.get(*i))
-            .map(|p| p.pid)
+        self.current_process().map(|p| p.pid)
     }
 
     pub fn move_up(&mut self) {
@@ -207,28 +249,30 @@ impl App {
     }
 
     pub fn move_down(&mut self) {
-        if !self.filtered.is_empty() && self.cursor + 1 < self.filtered.len() {
+        let len = self.display_len();
+        if len > 0 && self.cursor + 1 < len {
             self.cursor += 1;
             self.sync_table_state();
         }
     }
 
     pub fn move_first(&mut self) {
-        if !self.filtered.is_empty() {
+        if self.display_len() > 0 {
             self.cursor = 0;
             self.sync_table_state();
         }
     }
 
     pub fn move_last(&mut self) {
-        if !self.filtered.is_empty() {
-            self.cursor = self.filtered.len() - 1;
+        let len = self.display_len();
+        if len > 0 {
+            self.cursor = len - 1;
             self.sync_table_state();
         }
     }
 
     pub fn move_page_up(&mut self, step: usize) {
-        if self.filtered.is_empty() {
+        if self.display_len() == 0 {
             return;
         }
         let step = step.max(1);
@@ -237,12 +281,12 @@ impl App {
     }
 
     pub fn move_page_down(&mut self, step: usize) {
-        if self.filtered.is_empty() {
+        let len = self.display_len();
+        if len == 0 {
             return;
         }
         let step = step.max(1);
-        let max = self.filtered.len() - 1;
-        self.cursor = (self.cursor + step).min(max);
+        self.cursor = (self.cursor + step).min(len - 1);
         self.sync_table_state();
     }
 
@@ -264,10 +308,7 @@ impl App {
                 tree_hint
             );
         }
-        let p = self
-            .filtered
-            .get(self.cursor)
-            .and_then(|i| self.processes.get(*i));
+        let p = self.current_process();
         match p {
             Some(proc) => {
                 let ports = if proc.ports.is_empty() {
@@ -604,5 +645,53 @@ mod tests {
         let mut app = App::new(vec![]);
         app.toggle_detail();
         assert!(!app.show_detail);
+    }
+
+    #[test]
+    fn tree_view_reorders_rows_by_ppid() {
+        let procs = vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 0,
+                name: "init".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 10,
+                ppid: 1,
+                name: "node".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![3000],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 11,
+                ppid: 10,
+                name: "vite".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        let mut app = App::new(procs);
+        app.toggle_tree_view();
+        assert!(app.tree_view);
+        assert_eq!(app.tree_rows.len(), 3);
+        app.move_down();
+        assert_eq!(app.current_process().map(|p| p.name.as_str()), Some("node"));
     }
 }
