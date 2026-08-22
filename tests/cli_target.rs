@@ -26,6 +26,18 @@ fn multiple_ports() {
 }
 
 #[test]
+fn port_range() {
+    let cli = Cli::parse_from(["sw", ":3000-3002"]);
+    assert_eq!(cli.target, Target::Ports(vec![3000, 3001, 3002]));
+}
+
+#[test]
+fn port_range_with_single() {
+    let cli = Cli::parse_from(["sw", ":3000-3002", ":5173"]);
+    assert_eq!(cli.target, Target::Ports(vec![3000, 3001, 3002, 5173]));
+}
+
+#[test]
 fn subcommand_top() {
     let cli = Cli::parse_from(["sw", "top"]);
     assert_eq!(cli.target, Target::Sub(SubCommand::Top));

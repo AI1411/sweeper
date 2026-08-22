@@ -125,8 +125,8 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
     let mut names = Vec::new();
     for t in raw_targets {
         if let Some(p) = t.strip_prefix(':') {
-            if let Ok(port) = p.parse::<u16>() {
-                ports.push(port);
+            if let Some(expanded) = parse_port_token(p) {
+                ports.extend(expanded);
                 continue;
             }
         }
@@ -141,4 +141,42 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
     }
     // Mixed or multiple names: treat first as name (MVP)
     Target::Name(names.into_iter().next().unwrap_or_default())
+}
+
+/// Parse `:3000` or inclusive range `3000-3010`.
+fn parse_port_token(token: &str) -> Option<Vec<u16>> {
+    if token.is_empty() {
+        return None;
+    }
+    if let Some((start, end)) = token.split_once('-') {
+        let start: u16 = start.parse().ok()?;
+        let end: u16 = end.parse().ok()?;
+        if start > end {
+            return None;
+        }
+        return Some((start..=end).collect());
+    }
+    let port: u16 = token.parse().ok()?;
+    Some(vec![port])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_single_port() {
+        assert_eq!(parse_port_token("3000"), Some(vec![3000]));
+    }
+
+    #[test]
+    fn parse_port_range_inclusive() {
+        assert_eq!(parse_port_token("3000-3002"), Some(vec![3000, 3001, 3002]));
+    }
+
+    #[test]
+    fn parse_invalid_range_returns_none() {
+        assert_eq!(parse_port_token("3010-3000"), None);
+        assert_eq!(parse_port_token(""), None);
+    }
 }
