@@ -28,11 +28,9 @@ pub fn run_clean(force: bool) -> anyhow::Result<()> {
         }
         let mut use_force = force;
         let mut outcome = kill_pid(p.pid, &p.name, use_force)?;
-        if outcome == KillOutcome::StillAlive && !use_force {
-            if confirm("Force kill?")? {
-                use_force = true;
-                outcome = kill_pid(p.pid, &p.name, true)?;
-            }
+        if outcome == KillOutcome::StillAlive && !use_force && confirm("Force kill?")? {
+            use_force = true;
+            outcome = kill_pid(p.pid, &p.name, true)?;
         }
         let signal = if use_force && matches!(outcome, KillOutcome::ForceKilled) {
             KillSignal::Kill
