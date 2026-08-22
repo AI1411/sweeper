@@ -7,6 +7,9 @@ fn protects_system_daemons() {
     assert!(is_protected("WindowServer"));
     assert!(is_protected("Finder"));
     assert!(is_protected("Dock"));
+    assert!(is_protected("coreaudiod"));
+    assert!(is_protected("mds"));
+    assert!(is_protected("bluetoothd"));
 }
 
 #[test]
