@@ -1,4 +1,4 @@
-use sysinfo::{ProcessesToUpdate, System};
+use sysinfo::{ProcessStatus, ProcessesToUpdate, System};
 
 use super::types::ProcessInfo;
 
@@ -23,6 +23,7 @@ pub fn list_processes() -> Vec<ProcessInfo> {
         };
         let cwd = proc_.cwd().map(|p| p.to_string_lossy().into_owned());
 
+        let is_zombie = matches!(proc_.status(), ProcessStatus::Zombie);
         out.push(ProcessInfo {
             pid: pid.as_u32(),
             ppid: proc_.parent().map(|p| p.as_u32()).unwrap_or(0),
@@ -32,6 +33,8 @@ pub fn list_processes() -> Vec<ProcessInfo> {
             ports: Vec::new(),
             command: cmd,
             cwd,
+            run_time_secs: proc_.run_time(),
+            is_zombie,
         });
     }
     out.sort_by_key(|a| a.name.to_lowercase());

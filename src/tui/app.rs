@@ -159,6 +159,8 @@ mod tests {
             ports,
             command: None,
             cwd: None,
+            run_time_secs: 0,
+            is_zombie: false,
         }
     }
 

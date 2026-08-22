@@ -156,6 +156,8 @@ mod tests {
             ports: vec![],
             command: command.map(str::to_string),
             cwd: cwd.map(str::to_string),
+            run_time_secs: 0,
+            is_zombie: false,
         }
     }
 
