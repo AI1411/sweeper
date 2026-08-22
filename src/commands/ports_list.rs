@@ -1,8 +1,15 @@
+use crate::style;
+
 pub fn run_ports_list() -> anyhow::Result<()> {
     let mut procs = crate::process::list::list_processes();
     let ports = crate::process::ports::listening_ports()?;
     crate::process::ports::merge_ports(&mut procs, &ports);
-    println!("PORT    PROCESS       PID");
+    println!(
+        "{}    {}       {}",
+        style::header("PORT"),
+        style::header("PROCESS"),
+        style::header("PID")
+    );
     let mut rows = ports;
     rows.sort_by_key(|(port, _)| *port);
     for (port, pid) in rows {
@@ -11,7 +18,12 @@ pub fn run_ports_list() -> anyhow::Result<()> {
             .find(|p| p.pid == pid)
             .map(|p| p.name.as_str())
             .unwrap_or("?");
-        println!("{port:<7} {name:<12} {pid}");
+        println!(
+            "{} {} {}",
+            style::port(format!("{port:<7}")),
+            style::process_name(format!("{name:<12}")),
+            style::pid(pid)
+        );
     }
     Ok(())
 }

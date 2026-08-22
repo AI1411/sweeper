@@ -1,29 +1,41 @@
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::find_by_name_fuzzy;
+use crate::style;
 
 use super::confirm::confirm;
 
 pub fn run_name(query: &str, force: bool) -> anyhow::Result<()> {
     let matches = find_by_name_fuzzy(query);
     if matches.is_empty() {
-        println!("No processes matching '{query}'");
+        println!(
+            "{}",
+            style::warn(format!("No processes matching '{query}'"))
+        );
         return Ok(());
     }
-    println!("Found {} processes\n", matches.len());
+    println!(
+        "{} {} processes\n",
+        style::header("Found"),
+        style::process_name(matches.len())
+    );
     for p in &matches {
         println!(
-            "  {:>6}  {}  {:.1}%  {:.0} MB",
-            p.pid,
-            p.name,
-            p.cpu,
-            p.memory_mb()
+            "  {}  {}  {}  {}",
+            style::pid(format!("{:>6}", p.pid)),
+            style::process_name(&p.name),
+            style::cpu(p.cpu),
+            style::mem(format!("{:.0} MB", p.memory_mb()))
         );
     }
     let total: u64 = matches.iter().map(|p| p.memory_bytes).sum();
-    println!("\nTotal memory: {:.1} GB", total as f64 / 1e9);
+    println!(
+        "\n{} {}",
+        style::dim("Total memory:"),
+        style::mem(format!("{:.1} GB", total as f64 / 1e9))
+    );
     if !confirm("Kill all?")? {
-        println!("Cancelled.");
+        println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
     for p in matches {
@@ -48,7 +60,13 @@ pub fn run_name(query: &str, force: bool) -> anyhow::Result<()> {
             signal,
             format!("{outcome:?}"),
         ));
-        println!("{} pid {}: {:?}", p.name, p.pid, outcome);
+        println!(
+            "{} {} {}: {}",
+            style::process_name(&p.name),
+            style::dim("pid"),
+            style::pid(p.pid),
+            style::kill_outcome(outcome)
+        );
     }
     Ok(())
 }
