@@ -25,9 +25,7 @@ pub fn propose_leftovers(procs: &[ProcessInfo], listening: &[(u16, u32)]) -> Vec
                     break;
                 }
             }
-            let Some(dev) = matched_dev else {
-                return None;
-            };
+            let dev = matched_dev?;
             reasons.push(format!("name:{dev}"));
             let orphan = p.ppid == 1 || p.ppid == 0;
             let has_listen = listen_pids.contains(&p.pid);
