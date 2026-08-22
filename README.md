@@ -23,6 +23,8 @@ sw t            # show CPU / memory leaders
 sw c            # propose leftovers (you confirm each kill)
 sw h            # show kill history
 sw h --last     # show the most recent kill
+sw project      # list inferred projects
+sw project app  # inspect / kill a project
 ```
 
 ## Commands
@@ -36,7 +38,7 @@ sw h --last     # show the most recent kill
 | `sw top` | `t` | Top processes by CPU and memory |
 | `sw clean` | `c` | Propose leftover candidates; confirm before kill |
 | `sw history` | `h` | Kill history (`--last` for one entry) |
-| `sw project` | `proj` | Not implemented yet |
+| `sw project` | `proj` | List inferred projects; `sw project <name>` to kill |
 
 Examples:
 
@@ -47,6 +49,8 @@ sw ports
 sw top
 sw clean
 sw history --last
+sw project
+sw project my-app
 ```
 
 ## Options

@@ -1,5 +1,5 @@
 use sweeper::cli::{Cli, SubCommand, Target};
-use sweeper::commands::{clean, history, name, port, ports_list, top};
+use sweeper::commands::{clean, history, name, port, ports_list, project, top};
 use sweeper::tui;
 
 fn main() -> anyhow::Result<()> {
@@ -12,10 +12,8 @@ fn main() -> anyhow::Result<()> {
         Target::Sub(SubCommand::Top) => top::run_top()?,
         Target::Sub(SubCommand::Clean) => clean::run_clean(force)?,
         Target::Sub(SubCommand::History { last }) => history::run_history(last)?,
+        Target::Sub(SubCommand::Project { name }) => project::run_project(name, force)?,
         Target::Tui => tui::run()?,
-        other => {
-            println!("Not implemented yet: {other:?}");
-        }
     }
     Ok(())
 }
