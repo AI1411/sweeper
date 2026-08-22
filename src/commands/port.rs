@@ -1,111 +1,164 @@
+use std::collections::BTreeMap;
+
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::pids_for_port;
 use crate::process::tree::collect_tree_pids;
+use crate::process::ProcessInfo;
 use crate::style;
 
 use super::confirm::confirm;
 
-pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
-    let procs = list_processes();
-    for port in ports {
-        let pids = pids_for_port(*port)?;
+#[derive(Debug, Clone)]
+struct PortTarget {
+    pid: u32,
+    ports: Vec<u16>,
+    info: Option<ProcessInfo>,
+}
+
+/// Deduplicate PIDs across port bindings, merging the port list per PID.
+pub fn merge_port_bindings(rows: &[(u16, u32)]) -> BTreeMap<u32, Vec<u16>> {
+    let mut map: BTreeMap<u32, Vec<u16>> = BTreeMap::new();
+    for &(port, pid) in rows {
+        let e = map.entry(pid).or_default();
+        if !e.contains(&port) {
+            e.push(port);
+        }
+    }
+    map
+}
+
+fn collect_unique_targets(
+    procs: &[ProcessInfo],
+    ports: &[u16],
+) -> anyhow::Result<(Vec<PortTarget>, Vec<u16>)> {
+    let mut rows = Vec::new();
+    let mut unused = Vec::new();
+    for &port in ports {
+        let pids = pids_for_port(port)?;
         if pids.is_empty() {
-            println!(
-                "{} {}: {}",
-                style::header("PORT"),
-                style::port(port),
-                style::warn("not in use")
-            );
+            unused.push(port);
             continue;
         }
         for pid in pids {
-            let info = procs.iter().find(|p| p.pid == pid);
-            let name = info.map(|p| p.name.as_str()).unwrap_or("?");
-            let cpu = info.map(|p| p.cpu).unwrap_or(0.0);
-            let mem = info.map(|p| p.memory_mb()).unwrap_or(0.0);
-            println!(
-                "{}  {}    {}     {}    {}",
-                style::header("PORT"),
-                style::header("PID"),
-                style::header("PROCESS"),
-                style::header("CPU"),
-                style::header("MEM")
-            );
-            println!(
-                "{:<5} {} {} {}  {}",
-                style::port(format!("{port:<5}")),
-                style::pid(format!("{pid:<6}")),
-                style::process_name(format!("{name:<10}")),
-                style::cpu(cpu),
-                style::mem(format!("{mem:.0}MB"))
-            );
-
-            let kill_pids = if tree {
-                collect_tree_pids(&procs, &[pid])
-            } else {
-                vec![pid]
-            };
-            if tree && kill_pids.len() > 1 {
-                println!(
-                    "{}",
-                    style::dim(format!("  tree: {} processes", kill_pids.len()))
-                );
-            }
-
-            if !confirm(if tree {
-                "Kill this process tree?"
-            } else {
-                "Kill this process?"
-            })? {
-                continue;
-            }
-
-            for kid in kill_pids {
-                let (kname, kports) = procs
-                    .iter()
-                    .find(|p| p.pid == kid)
-                    .map(|p| (p.name.as_str(), p.ports.clone()))
-                    .unwrap_or_else(|| {
-                        if kid == pid {
-                            (name, vec![*port])
-                        } else {
-                            ("?", vec![])
-                        }
-                    });
-                let mut use_force = force;
-                let mut outcome = kill_pid(kid, kname, use_force)?;
-                if outcome == KillOutcome::StillAlive && !use_force && confirm("Force kill?")? {
-                    use_force = true;
-                    outcome = kill_pid(kid, kname, true)?;
-                }
-                let signal = if use_force && matches!(outcome, KillOutcome::ForceKilled) {
-                    KillSignal::Kill
-                } else {
-                    KillSignal::Term
-                };
-                let ports_rec = if kports.is_empty() && kid == pid {
-                    vec![*port]
-                } else {
-                    kports
-                };
-                let _ = append_entry(HistoryEntry::new(
-                    kid,
-                    kname,
-                    ports_rec,
-                    signal,
-                    format!("{outcome:?}"),
-                ));
-                println!(
-                    "{} {} {}: {}",
-                    style::process_name(kname),
-                    style::dim("pid"),
-                    style::pid(kid),
-                    style::kill_outcome(outcome)
-                );
-            }
+            rows.push((port, pid));
         }
+    }
+    let merged = merge_port_bindings(&rows);
+    let targets = merged
+        .into_iter()
+        .map(|(pid, ports)| PortTarget {
+            pid,
+            ports,
+            info: procs.iter().find(|p| p.pid == pid).cloned(),
+        })
+        .collect();
+    Ok((targets, unused))
+}
+
+pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
+    let procs = list_processes();
+    let (targets, unused) = collect_unique_targets(&procs, ports)?;
+
+    for port in &unused {
+        println!(
+            "{} {}: {}",
+            style::header("PORT"),
+            style::port(port),
+            style::warn("not in use")
+        );
+    }
+
+    if targets.is_empty() {
+        if unused.len() == ports.len() {
+            println!("{}", style::warn("No listening processes found."));
+        }
+        return Ok(());
+    }
+
+    println!(
+        "{}  {}    {}     {}    {}",
+        style::header("PORT"),
+        style::header("PID"),
+        style::header("PROCESS"),
+        style::header("CPU"),
+        style::header("MEM")
+    );
+    for t in &targets {
+        let name = t.info.as_ref().map(|p| p.name.as_str()).unwrap_or("?");
+        let cpu = t.info.as_ref().map(|p| p.cpu).unwrap_or(0.0);
+        let mem = t.info.as_ref().map(|p| p.memory_mb()).unwrap_or(0.0);
+        let port_str = t
+            .ports
+            .iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "{} {} {} {}  {}",
+            style::port(format!("{port_str:<7}")),
+            style::pid(format!("{:<6}", t.pid)),
+            style::process_name(format!("{name:<10}")),
+            style::cpu(cpu),
+            style::mem(format!("{mem:.0}MB"))
+        );
+    }
+
+    let root_pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
+    let kill_pids = if tree {
+        collect_tree_pids(&procs, &root_pids)
+    } else {
+        root_pids.clone()
+    };
+
+    let label = if tree {
+        format!("Kill {} process tree member(s)?", kill_pids.len())
+    } else {
+        format!("Kill {} process(es)?", targets.len())
+    };
+    if !confirm(&label)? {
+        println!("{}", style::warn("Cancelled."));
+        return Ok(());
+    }
+
+    for pid in kill_pids {
+        let target = targets.iter().find(|t| t.pid == pid);
+        let info = procs.iter().find(|p| p.pid == pid);
+        let name = info
+            .map(|p| p.name.as_str())
+            .or_else(|| target.and_then(|t| t.info.as_ref().map(|p| p.name.as_str())))
+            .unwrap_or("?");
+        let ports_rec = target
+            .map(|t| t.ports.clone())
+            .or_else(|| info.map(|p| p.ports.clone()))
+            .unwrap_or_default();
+
+        let mut use_force = force;
+        let mut outcome = kill_pid(pid, name, use_force)?;
+        if outcome == KillOutcome::StillAlive && !use_force && confirm("Force kill?")? {
+            use_force = true;
+            outcome = kill_pid(pid, name, true)?;
+        }
+        let signal = if use_force && matches!(outcome, KillOutcome::ForceKilled) {
+            KillSignal::Kill
+        } else {
+            KillSignal::Term
+        };
+        let _ = append_entry(HistoryEntry::new(
+            pid,
+            name,
+            ports_rec,
+            signal,
+            format!("{outcome:?}"),
+        ));
+        println!(
+            "{} {} {}: {}",
+            style::process_name(name),
+            style::dim("pid"),
+            style::pid(pid),
+            style::kill_outcome(outcome)
+        );
     }
     Ok(())
 }
