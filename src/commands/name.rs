@@ -3,6 +3,7 @@ use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::{find_by_name_fuzzy, list_processes};
 use crate::process::tree::collect_tree_pids;
 use crate::process::ProcessInfo;
+use crate::report;
 use crate::style;
 
 use super::confirm::confirm;
@@ -49,9 +50,16 @@ pub fn run_name(query: &str, force: bool, tree: bool) -> anyhow::Result<()> {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
+    let mut outcomes = Vec::new();
     for p in targets {
-        kill_one(&p, force)?;
+        let outcome = kill_one(&p, force)?;
+        outcomes.push((p.memory_bytes, outcome));
     }
+    let ok = outcomes
+        .iter()
+        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
+        .count();
+    report::print_summary(ok, report::freed_bytes(&outcomes));
     Ok(())
 }
 
@@ -71,7 +79,7 @@ fn expand_targets(all: &[ProcessInfo], matches: &[ProcessInfo], tree: bool) -> V
         .collect()
 }
 
-fn kill_one(p: &ProcessInfo, force: bool) -> anyhow::Result<()> {
+fn kill_one(p: &ProcessInfo, force: bool) -> anyhow::Result<KillOutcome> {
     let mut use_force = force;
     let mut outcome = kill_pid(p.pid, &p.name, use_force)?;
     if outcome == KillOutcome::StillAlive
@@ -100,5 +108,5 @@ fn kill_one(p: &ProcessInfo, force: bool) -> anyhow::Result<()> {
         style::pid(p.pid),
         style::kill_outcome(outcome)
     );
-    Ok(())
+    Ok(outcome)
 }

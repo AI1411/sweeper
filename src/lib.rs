@@ -5,6 +5,7 @@ pub mod error;
 pub mod history;
 pub mod process;
 pub mod project;
+pub mod report;
 pub mod style;
 pub mod tui;
 

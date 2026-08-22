@@ -152,19 +152,12 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
     };
 
     let mut killed = 0;
+    let mut freed = 0u64;
     for pid in pids {
-        let name = app
-            .processes
-            .iter()
-            .find(|p| p.pid == pid)
-            .map(|p| p.name.clone())
-            .unwrap_or_else(|| "?".into());
-        let ports = app
-            .processes
-            .iter()
-            .find(|p| p.pid == pid)
-            .map(|p| p.ports.clone())
-            .unwrap_or_default();
+        let info = app.processes.iter().find(|p| p.pid == pid);
+        let name = info.map(|p| p.name.clone()).unwrap_or_else(|| "?".into());
+        let ports = info.map(|p| p.ports.clone()).unwrap_or_default();
+        let mem = info.map(|p| p.memory_bytes).unwrap_or(0);
 
         let outcome = kill_pid(pid, &name, force)?;
         let signal = if force && matches!(outcome, KillOutcome::ForceKilled) {
@@ -181,6 +174,7 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         ));
         if matches!(outcome, KillOutcome::Terminated | KillOutcome::ForceKilled) {
             killed += 1;
+            freed += mem;
         }
         app.status = format!("{name} ({pid}): {outcome:?}");
     }
@@ -190,7 +184,8 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         app.apply_ports(&ports);
     }
     let kind = if tree { "tree " } else { "" };
-    app.status = format!("Killed {killed} {kind}process(es)");
+    let mb = freed as f64 / (1024.0 * 1024.0);
+    app.status = format!("Killed {killed} {kind}process(es); ~{mb:.0} MB freed (estimate)");
     let _ = io::Write::flush(&mut io::stdout());
     Ok(())
 }
