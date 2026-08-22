@@ -108,11 +108,7 @@ mod tests {
     #[test]
     fn released_ports_dedupes_and_sorts() {
         let results = [
-            KillResult::new(
-                100,
-                vec![3000, 5173],
-                KillOutcome::Terminated,
-            ),
+            KillResult::new(100, vec![3000, 5173], KillOutcome::Terminated),
             KillResult::new(50, vec![3000], KillOutcome::ForceKilled),
             KillResult::new(10, vec![8080], KillOutcome::StillAlive),
         ];

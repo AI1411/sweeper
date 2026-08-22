@@ -147,7 +147,11 @@ fn kill_named(groups: &[ProjectGroup], query: &str, force: bool) -> anyhow::Resu
             style::pid(p.pid),
             style::kill_outcome(outcome)
         );
-        outcomes.push(crate::report::KillResult::new(p.memory_bytes, p.ports.clone(), outcome));
+        outcomes.push(crate::report::KillResult::new(
+            p.memory_bytes,
+            p.ports.clone(),
+            outcome,
+        ));
     }
     crate::report::print_kill_summary(&outcomes);
     Ok(())

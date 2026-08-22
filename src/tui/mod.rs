@@ -198,9 +198,8 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
             .join(", ");
         format!("; ports {list}")
     };
-    app.status = format!(
-        "Killed {killed} {kind}process(es); ~{mb:.0} MB freed (estimate){ports_hint}"
-    );
+    app.status =
+        format!("Killed {killed} {kind}process(es); ~{mb:.0} MB freed (estimate){ports_hint}");
     let _ = io::Write::flush(&mut io::stdout());
     Ok(())
 }
