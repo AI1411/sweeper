@@ -1,12 +1,17 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
     Frame,
 };
 
 use super::app::App;
+
+const ACCENT: Color = Color::Cyan;
+const PORT: Color = Color::Yellow;
+const MEM: Color = Color::Magenta;
+const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
@@ -30,17 +35,34 @@ fn draw_search(frame: &mut Frame, app: &App, area: Rect) {
         " Sweeper "
     };
     let text = if app.searching || !app.query.is_empty() {
-        format!("/{}", app.query)
+        Line::from(vec![
+            Span::styled(
+                "/",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(app.query.clone()),
+        ])
     } else {
-        "Press / to search".to_string()
+        Line::from(Span::styled(
+            "Press / to search",
+            Style::default().fg(MUTED),
+        ))
     };
-    let widget = Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(title));
+    let widget = Paragraph::new(text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                title,
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+    );
     frame.render_widget(widget, area);
 }
 
 fn draw_table(frame: &mut Frame, app: &App, area: Rect) {
     let header = Row::new(vec!["", "PID", "PROCESS", "PORT", "CPU", "MEM"])
-        .style(Style::default().add_modifier(Modifier::BOLD));
+        .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
 
     let rows = app.filtered.iter().enumerate().map(|(idx, &pi)| {
         let p = &app.processes[pi];
@@ -60,16 +82,30 @@ fn draw_table(frame: &mut Frame, app: &App, area: Rect) {
                 .collect::<Vec<_>>()
                 .join(",")
         };
+        let cpu_style = if p.cpu >= 50.0 {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        } else if p.cpu >= 20.0 {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::Green)
+        };
         let row = Row::new(vec![
-            mark.to_string(),
-            p.pid.to_string(),
-            p.name.clone(),
-            ports,
-            format!("{:.1}%", p.cpu),
-            format!("{:.0} MB", p.memory_mb()),
+            Cell::from(mark),
+            Cell::from(p.pid.to_string()).style(Style::default().fg(MUTED)),
+            Cell::from(p.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
+            Cell::from(ports).style(Style::default().fg(PORT)),
+            Cell::from(format!("{:.1}%", p.cpu)).style(cpu_style),
+            Cell::from(format!("{:.0} MB", p.memory_mb())).style(Style::default().fg(MEM)),
         ]);
         if idx == app.cursor {
-            row.style(Style::default().add_modifier(Modifier::REVERSED))
+            row.style(
+                Style::default()
+                    .bg(ACCENT)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD),
+            )
+        } else if app.selected.contains(&p.pid) {
+            row.style(Style::default().fg(Color::LightCyan))
         } else {
             row
         }
@@ -87,26 +123,66 @@ fn draw_table(frame: &mut Frame, app: &App, area: Rect) {
         ],
     )
     .header(header)
-    .block(Block::default().borders(Borders::ALL).title(" Processes "));
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                " Processes ",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+    );
 
     frame.render_widget(table, area);
 }
 
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     let help = Line::from(vec![
-        Span::raw("[↑↓] Move  "),
-        Span::raw("[Space] Select  "),
-        Span::raw("[k] Kill  "),
-        Span::raw("[K] Force  "),
-        Span::raw("[/] Search  "),
-        Span::raw("[q] Quit"),
+        Span::styled(
+            "[↑↓]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Move  "),
+        Span::styled(
+            "[Space]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Select  "),
+        Span::styled(
+            "[k]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Kill  "),
+        Span::styled(
+            "[K]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Force  "),
+        Span::styled(
+            "[/]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Search  "),
+        Span::styled(
+            "[q]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Quit"),
     ]);
     let status = if app.status.is_empty() {
         format!("{} processes", app.filtered.len())
     } else {
         app.status.clone()
     };
-    let text = vec![help, Line::from(status)];
-    let widget = Paragraph::new(text).block(Block::default().borders(Borders::ALL).title(" Help "));
+    let text = vec![
+        help,
+        Line::from(Span::styled(status, Style::default().fg(MUTED))),
+    ];
+    let widget = Paragraph::new(text).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(MUTED))
+            .title(Span::styled(" Help ", Style::default().fg(MUTED))),
+    );
     frame.render_widget(widget, area);
 }
