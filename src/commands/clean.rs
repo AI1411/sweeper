@@ -1,6 +1,6 @@
 use crate::clean::{
-    apply_excludes, excludes_from_env, format_age, format_command_snippet, format_reasons_display,
-    propose_leftovers, summarize, CleanSummary,
+    apply_excludes, confidence_level, excludes_from_env, format_age, format_command_snippet,
+    format_reasons_display, propose_leftovers, summarize, CleanSummary,
 };
 use crate::commands::confirm::confirm;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
@@ -27,8 +27,9 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
         let p = &c.process;
         let age = format_age(p.run_time_secs);
         let reasons = format_reasons_display(c);
+        let confidence = confidence_level(c);
         println!(
-            "  {} {} {} {} {:?} {} {}  {} {}",
+            "  {} {} {} {} {:?} {} {}  {} {}  {} {}",
             style::process_name(&p.name),
             style::dim("pid"),
             style::pid(p.pid),
@@ -36,6 +37,8 @@ pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
             p.ports,
             style::dim("age"),
             style::dim(age),
+            style::dim("confidence:"),
+            style::warn(confidence),
             style::dim("reasons:"),
             style::warn(reasons.join(", "))
         );
