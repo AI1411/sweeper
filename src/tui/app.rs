@@ -123,7 +123,11 @@ impl App {
         }
         crate::process::ports::merge_ports(&mut self.processes, port_map);
         self.refilter();
-        let with_ports = self.processes.iter().filter(|p| !p.ports.is_empty()).count();
+        let with_ports = self
+            .processes
+            .iter()
+            .filter(|p| !p.ports.is_empty())
+            .count();
         self.status = format!(
             "Loaded {} listening ports → {} processes",
             port_map.len(),
@@ -160,10 +164,7 @@ mod tests {
 
     #[test]
     fn search_matches_port_number() {
-        let mut app = App::new(vec![
-            proc(1, "node", vec![3000]),
-            proc(2, "bash", vec![]),
-        ]);
+        let mut app = App::new(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
         app.query = "3000".into();
         app.refilter();
         assert_eq!(app.filtered.len(), 1);
@@ -180,10 +181,7 @@ mod tests {
 
     #[test]
     fn ports_only_filter() {
-        let mut app = App::new(vec![
-            proc(1, "node", vec![3000]),
-            proc(2, "bash", vec![]),
-        ]);
+        let mut app = App::new(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
         app.toggle_ports_only();
         assert!(app.ports_only);
         assert_eq!(app.filtered.len(), 1);
