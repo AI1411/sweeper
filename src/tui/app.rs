@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use ratatui::widgets::TableState;
+
 use crate::process::ProcessInfo;
 
 pub struct App {
@@ -14,6 +16,7 @@ pub struct App {
     /// When true, only show processes that have at least one LISTEN port.
     pub ports_only: bool,
     pub last_ports: Vec<(u16, u32)>,
+    pub table_state: TableState,
 }
 
 impl App {
@@ -29,9 +32,18 @@ impl App {
             status: "Loading listening ports…".into(),
             ports_only: false,
             last_ports: Vec::new(),
+            table_state: TableState::default(),
         };
         app.refilter();
         app
+    }
+
+    pub fn sync_table_state(&mut self) {
+        if self.filtered.is_empty() {
+            self.table_state.select(None);
+        } else {
+            self.table_state.select(Some(self.cursor));
+        }
     }
 
     pub fn refilter(&mut self) {
@@ -66,6 +78,7 @@ impl App {
         if self.filtered.is_empty() {
             self.cursor = 0;
         }
+        self.sync_table_state();
     }
 
     pub fn current_pid(&self) -> Option<u32> {
@@ -78,12 +91,14 @@ impl App {
     pub fn move_up(&mut self) {
         if self.cursor > 0 {
             self.cursor -= 1;
+            self.sync_table_state();
         }
     }
 
     pub fn move_down(&mut self) {
         if !self.filtered.is_empty() && self.cursor + 1 < self.filtered.len() {
             self.cursor += 1;
+            self.sync_table_state();
         }
     }
 
@@ -186,5 +201,33 @@ mod tests {
         assert!(app.ports_only);
         assert_eq!(app.filtered.len(), 1);
         assert_eq!(app.processes[app.filtered[0]].name, "node");
+    }
+
+    #[test]
+    fn table_state_follows_cursor() {
+        let mut app = App::new(vec![
+            proc(1, "a", vec![]),
+            proc(2, "b", vec![]),
+            proc(3, "c", vec![]),
+        ]);
+        assert_eq!(app.table_state.selected(), Some(0));
+        app.move_down();
+        assert_eq!(app.cursor, 1);
+        assert_eq!(app.table_state.selected(), Some(1));
+        app.move_down();
+        app.move_down();
+        assert_eq!(app.cursor, 2);
+        assert_eq!(app.table_state.selected(), Some(2));
+        app.move_up();
+        assert_eq!(app.table_state.selected(), Some(1));
+    }
+
+    #[test]
+    fn refilter_clears_table_selection_when_empty() {
+        let mut app = App::new(vec![proc(1, "node", vec![3000])]);
+        app.query = "nomatch".into();
+        app.refilter();
+        assert!(app.filtered.is_empty());
+        assert_eq!(app.table_state.selected(), None);
     }
 }
