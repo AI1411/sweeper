@@ -11,7 +11,6 @@ fn parses_typical_lsof_line() {
 
 #[test]
 fn ignores_non_listen() {
-    let line =
-        "node 48291 user 20u IPv4 0x0 0t0 TCP 127.0.0.1:3000->127.0.0.1:4000 (ESTABLISHED)";
+    let line = "node 48291 user 20u IPv4 0x0 0t0 TCP 127.0.0.1:3000->127.0.0.1:4000 (ESTABLISHED)";
     assert!(parse_lsof_listen_line(line).is_none());
 }

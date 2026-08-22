@@ -164,10 +164,7 @@ fn kill_selection(app: &mut App, force: bool) -> anyhow::Result<()> {
             signal,
             format!("{outcome:?}"),
         ));
-        if matches!(
-            outcome,
-            KillOutcome::Terminated | KillOutcome::ForceKilled
-        ) {
+        if matches!(outcome, KillOutcome::Terminated | KillOutcome::ForceKilled) {
             killed += 1;
         }
         app.status = format!("{name} ({pid}): {outcome:?}");

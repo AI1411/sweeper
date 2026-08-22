@@ -29,11 +29,12 @@ pub fn run_name(query: &str, force: bool) -> anyhow::Result<()> {
     for p in matches {
         let mut use_force = force;
         let mut outcome = kill_pid(p.pid, &p.name, use_force)?;
-        if outcome == KillOutcome::StillAlive && !use_force {
-            if confirm(&format!("PID {} still alive. Force kill?", p.pid))? {
-                use_force = true;
-                outcome = kill_pid(p.pid, &p.name, true)?;
-            }
+        if outcome == KillOutcome::StillAlive
+            && !use_force
+            && confirm(&format!("PID {} still alive. Force kill?", p.pid))?
+        {
+            use_force = true;
+            outcome = kill_pid(p.pid, &p.name, true)?;
         }
         let signal = if use_force && outcome == KillOutcome::ForceKilled {
             KillSignal::Kill
