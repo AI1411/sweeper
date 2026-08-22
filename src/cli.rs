@@ -57,9 +57,7 @@ enum RawSub {
         last: bool,
     },
     #[command(visible_alias = "proj")]
-    Project {
-        name: Option<String>,
-    },
+    Project { name: Option<String> },
 }
 
 impl Cli {
