@@ -198,6 +198,18 @@ pub fn score_candidate(c: &CleanCandidate) -> u32 {
     score
 }
 
+/// Confidence hint for CLI display derived from `score_candidate`.
+pub fn confidence_level(c: &CleanCandidate) -> &'static str {
+    let score = score_candidate(c);
+    if score >= 60 {
+        "high"
+    } else if score >= 30 {
+        "medium"
+    } else {
+        "low"
+    }
+}
+
 fn detect_dev_stack(p: &ProcessInfo) -> Option<(String, String)> {
     if let Some(cmd) = p.command.as_deref() {
         let cmd_l = cmd.to_lowercase();
@@ -508,5 +520,28 @@ mod tests {
         let s = format_command_snippet(Some(long)).unwrap();
         assert!(s.chars().count() <= 41);
         assert!(s.ends_with('…'));
+    }
+
+    #[test]
+    fn confidence_high_for_stale_and_orphans() {
+        let stale = CleanCandidate {
+            process: proc_with(1, 50, "node", 0.0, STALE_SERVER_SECS, vec![3000], None),
+            reasons: vec!["stale-server".into()],
+        };
+        assert_eq!(confidence_level(&stale), "high");
+        let orphan = CleanCandidate {
+            process: proc_with(1, 9999, "node", 0.0, 60, vec![3000], None),
+            reasons: vec!["orphan-parent".into()],
+        };
+        assert_eq!(confidence_level(&orphan), "high");
+    }
+
+    #[test]
+    fn confidence_medium_for_idle_listener() {
+        let c = CleanCandidate {
+            process: proc_with(1, 50, "node", 0.1, IDLE_LISTENER_SECS, vec![3000], None),
+            reasons: vec!["idle-listener".into()],
+        };
+        assert_eq!(confidence_level(&c), "medium");
     }
 }
