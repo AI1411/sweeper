@@ -24,7 +24,7 @@ pub struct CliArgs {
     #[arg(long, global = true)]
     pub force: bool,
 
-    /// Kill process tree (MVP: accepted, behavior may stub)
+    /// Kill process tree (root + descendants via PPID)
     #[arg(long, global = true)]
     pub tree: bool,
 

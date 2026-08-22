@@ -58,7 +58,7 @@ sw project my-app
 | Flag | Description |
 | --- | --- |
 | `--force` | Allow SIGKILL when a process does not exit after SIGTERM |
-| `--tree` | Accepted in MVP; tree kill behavior is still a stub |
+| `--tree` | Also kill descendants (PPID tree), children first |
 | `-h`, `--help` | Print help |
 
 Flags may appear before or after targets:
@@ -66,6 +66,7 @@ Flags may appear before or after targets:
 ```bash
 sw :3000 --force
 sw --force node
+sw node --tree
 ```
 
 ## TUI
@@ -79,6 +80,8 @@ Launch with bare `sw`.
 | `/` | Search |
 | `k` | SIGTERM selected |
 | `K` | SIGKILL selected |
+| `t` | SIGTERM selected + descendants |
+| `T` | SIGKILL selected + descendants |
 | `r` | Refresh |
 | `q` | Quit |
 

@@ -159,6 +159,16 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::raw(" Force  "),
         Span::styled(
+            "[t]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Tree  "),
+        Span::styled(
+            "[T]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Force tree  "),
+        Span::styled(
             "[/]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),

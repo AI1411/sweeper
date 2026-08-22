@@ -2,11 +2,12 @@ use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::pids_for_port;
+use crate::process::tree::collect_tree_pids;
 use crate::style;
 
 use super::confirm::confirm;
 
-pub fn run_ports(ports: &[u16], force: bool) -> anyhow::Result<()> {
+pub fn run_ports(ports: &[u16], force: bool, tree: bool) -> anyhow::Result<()> {
     let procs = list_processes();
     for port in ports {
         let pids = pids_for_port(*port)?;
@@ -40,28 +41,70 @@ pub fn run_ports(ports: &[u16], force: bool) -> anyhow::Result<()> {
                 style::cpu(cpu),
                 style::mem(format!("{mem:.0}MB"))
             );
-            if !confirm("Kill this process?")? {
+
+            let kill_pids = if tree {
+                collect_tree_pids(&procs, &[pid])
+            } else {
+                vec![pid]
+            };
+            if tree && kill_pids.len() > 1 {
+                println!(
+                    "{}",
+                    style::dim(format!("  tree: {} processes", kill_pids.len()))
+                );
+            }
+
+            if !confirm(if tree {
+                "Kill this process tree?"
+            } else {
+                "Kill this process?"
+            })? {
                 continue;
             }
-            let mut use_force = force;
-            let mut outcome = kill_pid(pid, name, use_force)?;
-            if outcome == KillOutcome::StillAlive && !use_force && confirm("Force kill?")? {
-                use_force = true;
-                outcome = kill_pid(pid, name, true)?;
+
+            for kid in kill_pids {
+                let (kname, kports) = procs
+                    .iter()
+                    .find(|p| p.pid == kid)
+                    .map(|p| (p.name.as_str(), p.ports.clone()))
+                    .unwrap_or_else(|| {
+                        if kid == pid {
+                            (name, vec![*port])
+                        } else {
+                            ("?", vec![])
+                        }
+                    });
+                let mut use_force = force;
+                let mut outcome = kill_pid(kid, kname, use_force)?;
+                if outcome == KillOutcome::StillAlive && !use_force && confirm("Force kill?")? {
+                    use_force = true;
+                    outcome = kill_pid(kid, kname, true)?;
+                }
+                let signal = if use_force && matches!(outcome, KillOutcome::ForceKilled) {
+                    KillSignal::Kill
+                } else {
+                    KillSignal::Term
+                };
+                let ports_rec = if kports.is_empty() && kid == pid {
+                    vec![*port]
+                } else {
+                    kports
+                };
+                let _ = append_entry(HistoryEntry::new(
+                    kid,
+                    kname,
+                    ports_rec,
+                    signal,
+                    format!("{outcome:?}"),
+                ));
+                println!(
+                    "{} {} {}: {}",
+                    style::process_name(kname),
+                    style::dim("pid"),
+                    style::pid(kid),
+                    style::kill_outcome(outcome)
+                );
             }
-            let signal = if use_force && matches!(outcome, KillOutcome::ForceKilled) {
-                KillSignal::Kill
-            } else {
-                KillSignal::Term
-            };
-            let _ = append_entry(HistoryEntry::new(
-                pid,
-                name,
-                vec![*port],
-                signal,
-                format!("{outcome:?}"),
-            ));
-            println!("{}", style::kill_outcome(outcome));
         }
     }
     Ok(())

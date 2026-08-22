@@ -18,6 +18,7 @@ use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::listening_ports;
+use crate::process::tree::collect_tree_pids;
 
 use self::app::App;
 
@@ -117,8 +118,10 @@ fn handle_key(app: &mut App, code: KeyCode) -> anyhow::Result<bool> {
         KeyCode::Up => app.move_up(),
         KeyCode::Down | KeyCode::Char('j') => app.move_down(),
         KeyCode::Char(' ') => app.toggle_select_current(),
-        KeyCode::Char('k') => kill_selection(app, false)?,
-        KeyCode::Char('K') => kill_selection(app, true)?,
+        KeyCode::Char('k') => kill_selection(app, false, false)?,
+        KeyCode::Char('K') => kill_selection(app, true, false)?,
+        KeyCode::Char('t') => kill_selection(app, false, true)?,
+        KeyCode::Char('T') => kill_selection(app, true, true)?,
         KeyCode::Char('r') => {
             app.refresh();
             app.status = "Refreshed process list".into();
@@ -128,12 +131,18 @@ fn handle_key(app: &mut App, code: KeyCode) -> anyhow::Result<bool> {
     Ok(false)
 }
 
-fn kill_selection(app: &mut App, force: bool) -> anyhow::Result<()> {
-    let pids = app.pids_to_kill();
-    if pids.is_empty() {
+fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> {
+    let roots = app.pids_to_kill();
+    if roots.is_empty() {
         app.status = "Nothing to kill".into();
         return Ok(());
     }
+
+    let pids = if tree {
+        collect_tree_pids(&app.processes, &roots)
+    } else {
+        roots
+    };
 
     let mut killed = 0;
     for pid in pids {
@@ -150,7 +159,6 @@ fn kill_selection(app: &mut App, force: bool) -> anyhow::Result<()> {
             .map(|p| p.ports.clone())
             .unwrap_or_default();
 
-        // Leave TUI briefly is hard; kill inline and report status.
         let outcome = kill_pid(pid, &name, force)?;
         let signal = if force && matches!(outcome, KillOutcome::ForceKilled) {
             KillSignal::Kill
@@ -174,7 +182,8 @@ fn kill_selection(app: &mut App, force: bool) -> anyhow::Result<()> {
     if let Ok(ports) = listening_ports() {
         app.apply_ports(&ports);
     }
-    app.status = format!("Killed {killed} process(es)");
+    let kind = if tree { "tree " } else { "" };
+    app.status = format!("Killed {killed} {kind}process(es)");
     let _ = io::Write::flush(&mut io::stdout());
     Ok(())
 }
