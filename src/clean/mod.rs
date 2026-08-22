@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::process::protect::is_protected;
 use crate::process::ProcessInfo;
 
 /// A listener running longer than this is flagged as stale.
@@ -121,6 +122,7 @@ pub fn propose_leftovers(procs: &[ProcessInfo], listening: &[(u16, u32)]) -> Vec
 
     let mut out: Vec<CleanCandidate> = procs
         .iter()
+        .filter(|p| !is_protected(&p.name))
         .filter_map(|p| {
             let (stack, stack_reason) = detect_dev_stack(p)?;
             let reasons = collect_reasons(p, &listen_pids, &pid_set, &ports_by_pid, &stack_reason);

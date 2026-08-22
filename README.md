@@ -102,6 +102,21 @@ Launch with bare `sw`.
 - There is no `-y` / `--yes` skip for confirmations.
 - After kills, Sweeper prints an **estimated** memory freed total from the pre-kill snapshot (not proof of OS reclaim).
 
+## Protected processes
+
+Built-in protection covers critical macOS system daemons. Extend the list with a config file:
+
+```text
+# ~/.config/sweeper/protect.toml  (Linux)
+# ~/Library/Application Support/com.sweeper.sweeper/protect.toml  (macOS)
+
+postgres
+redis
+my-critical-daemon
+```
+
+One process name per line; `#` comments allowed. Protected names are matched case-insensitively against the process basename.
+
 ## Colors
 
 CLI and TUI use color when stdout is a TTY. Set `NO_COLOR` to disable.
