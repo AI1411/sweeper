@@ -4,6 +4,13 @@ use ratatui::widgets::TableState;
 
 use crate::process::tree::{layout_tree_rows, TreeRow};
 use crate::process::ProcessInfo;
+use crate::project::{group_projects, summarize_group, ProjectGroup};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewMode {
+    Processes,
+    Projects,
+}
 
 /// Kill parameters awaiting TUI confirmation ([y/N]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,6 +40,9 @@ pub struct App {
     pub show_detail: bool,
     pub tree_view: bool,
     pub tree_rows: Vec<TreeRow>,
+    pub view_mode: ViewMode,
+    pub project_groups: Vec<ProjectGroup>,
+    pub expanded_project: Option<usize>,
 }
 
 impl App {
@@ -54,6 +64,9 @@ impl App {
             show_detail: false,
             tree_view: false,
             tree_rows: Vec::new(),
+            view_mode: ViewMode::Processes,
+            project_groups: Vec::new(),
+            expanded_project: None,
         };
         app.refilter();
         app
@@ -82,7 +95,89 @@ impl App {
         self.confirming_kill.is_some()
     }
 
+    pub fn toggle_project_view(&mut self) {
+        if self.view_mode == ViewMode::Processes {
+            self.view_mode = ViewMode::Projects;
+            self.tree_view = false;
+            self.tree_rows.clear();
+            self.show_detail = false;
+            self.expanded_project = None;
+            self.selected.clear();
+            self.cursor = 0;
+            self.project_groups = group_projects(&self.processes);
+            self.refilter();
+            self.status = format!("Projects: {} group(s) [P back]", self.project_groups.len());
+        } else {
+            self.view_mode = ViewMode::Processes;
+            self.expanded_project = None;
+            self.cursor = 0;
+            self.refilter();
+            self.status = "View: processes".into();
+        }
+    }
+
+    pub fn toggle_project_expand(&mut self) {
+        if self.view_mode != ViewMode::Projects {
+            return;
+        }
+        if self.expanded_project.is_some() {
+            self.collapse_project();
+            return;
+        }
+        if let Some(idx) = self.project_group_index_at_cursor() {
+            self.expanded_project = Some(idx);
+            self.selected.clear();
+            self.cursor = 0;
+            self.refilter();
+            if let Some(g) = self.project_groups.get(idx) {
+                self.status = format!("Expanded {} (Enter/Esc collapse)", g.name);
+            }
+        }
+    }
+
+    pub fn collapse_project(&mut self) {
+        if self.expanded_project.is_some() {
+            self.expanded_project = None;
+            self.selected.clear();
+            self.cursor = 0;
+            self.refilter();
+            self.status = "Collapsed project".into();
+        }
+    }
+
+    pub fn in_project_list(&self) -> bool {
+        self.view_mode == ViewMode::Projects && self.expanded_project.is_none()
+    }
+
+    pub fn visible_project_groups(&self) -> Vec<&ProjectGroup> {
+        let q = self.query.to_lowercase();
+        self.project_groups
+            .iter()
+            .filter(|g| {
+                q.is_empty()
+                    || g.name.to_lowercase().contains(&q)
+                    || g.path.to_lowercase().contains(&q)
+            })
+            .collect()
+    }
+
+    fn project_group_index_at_cursor(&self) -> Option<usize> {
+        self.visible_project_groups()
+            .get(self.cursor)
+            .and_then(|g| self.project_groups.iter().position(|pg| pg.path == g.path))
+    }
+
+    pub fn current_project_group(&self) -> Option<&ProjectGroup> {
+        if !self.in_project_list() {
+            return None;
+        }
+        self.visible_project_groups().get(self.cursor).copied()
+    }
+
     pub fn toggle_detail(&mut self) {
+        if self.in_project_list() {
+            return;
+        }
         if self.current_process().is_some() {
             self.show_detail = !self.show_detail;
         } else {
@@ -91,6 +186,9 @@ impl App {
     }
 
     pub fn toggle_tree_view(&mut self) {
+        if self.view_mode != ViewMode::Processes {
+            return;
+        }
         self.tree_view = !self.tree_view;
         self.rebuild_tree_rows();
         self.cursor = 0;
@@ -110,7 +208,9 @@ impl App {
     }
 
     fn display_len(&self) -> usize {
-        if self.tree_view {
+        if self.in_project_list() {
+            self.visible_project_groups().len()
+        } else if self.tree_view {
             self.tree_rows.len()
         } else {
             self.filtered.len()
@@ -188,6 +288,12 @@ impl App {
     }
 
     pub fn sync_table_state(&mut self) {
+        if self.in_project_list() {
+            let len = self.visible_project_groups().len();
+            self.table_state
+                .select(if len == 0 { None } else { Some(self.cursor) });
+            return;
+        }
         if self.display_len() == 0 {
             self.table_state.select(None);
         } else {
@@ -196,6 +302,40 @@ impl App {
     }
 
     pub fn refilter(&mut self) {
+        if self.view_mode == ViewMode::Projects {
+            self.project_groups = group_projects(&self.processes);
+            if let Some(idx) = self.expanded_project {
+                if let Some(group) = self.project_groups.get(idx) {
+                    self.filtered = group
+                        .processes
+                        .iter()
+                        .filter_map(|m| self.processes.iter().position(|p| p.pid == m.pid))
+                        .collect();
+                } else {
+                    self.expanded_project = None;
+                    self.filtered.clear();
+                }
+            } else {
+                self.filtered.clear();
+                let len = self.visible_project_groups().len();
+                if self.cursor >= len && len > 0 {
+                    self.cursor = len - 1;
+                }
+                if len == 0 {
+                    self.cursor = 0;
+                }
+            }
+            if self.expanded_project.is_some() {
+                if self.cursor >= self.filtered.len() && !self.filtered.is_empty() {
+                    self.cursor = self.filtered.len() - 1;
+                }
+                if self.filtered.is_empty() {
+                    self.cursor = 0;
+                }
+            }
+            self.sync_table_state();
+            return;
+        }
         let q = self.query.to_lowercase();
         let q_port = q.trim_start_matches(':');
         self.filtered = self
@@ -301,6 +441,15 @@ impl App {
             return "Nothing to kill".into();
         }
         let tree_hint = if tree { " (+ descendants)" } else { "" };
+        if self.in_project_list() {
+            if let Some(g) = self.current_project_group() {
+                let s = summarize_group(g);
+                return format!(
+                    "Kill preview → project {}{} ({} processes)",
+                    g.name, tree_hint, s.process_count
+                );
+            }
+        }
         if !self.selected.is_empty() {
             return format!(
                 "Kill preview: {} selected process(es){}",
@@ -364,6 +513,12 @@ impl App {
     }
 
     pub fn pids_to_kill(&self) -> Vec<u32> {
+        if self.in_project_list() {
+            if let Some(g) = self.current_project_group() {
+                return g.processes.iter().map(|p| p.pid).collect();
+            }
+            return Vec::new();
+        }
         if !self.selected.is_empty() {
             self.selected.iter().copied().collect()
         } else if let Some(pid) = self.current_pid() {
@@ -399,6 +554,7 @@ impl App {
         if !self.last_ports.is_empty() {
             crate::process::ports::merge_ports(&mut self.processes, &self.last_ports);
         }
+        self.project_groups = group_projects(&self.processes);
         self.refilter();
     }
 }
@@ -645,6 +801,77 @@ mod tests {
         let mut app = App::new(vec![]);
         app.toggle_detail();
         assert!(!app.show_detail);
+    }
+    #[test]
+    fn project_view_toggle() {
+        let mut app = App::new(vec![ProcessInfo {
+            pid: 1,
+            ppid: 1,
+            name: "node".into(),
+            cpu: 0.0,
+            memory_bytes: 0,
+            ports: vec![],
+            command: None,
+            cwd: Some("/Users/me/my-app".into()),
+            run_time_secs: 0,
+            is_zombie: false,
+        }]);
+        app.toggle_project_view();
+        assert_eq!(app.view_mode, ViewMode::Projects);
+        assert!(!app.project_groups.is_empty());
+    }
+
+    #[test]
+    fn project_expand_lists_members() {
+        let mut app = App::new(vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 1,
+                name: "node".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![3000],
+                command: None,
+                cwd: Some("/Users/me/my-app".into()),
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "vite".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![],
+                command: None,
+                cwd: Some("/Users/me/my-app".into()),
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ]);
+        app.toggle_project_view();
+        app.toggle_project_expand();
+        assert_eq!(app.filtered.len(), 2);
+    }
+
+    #[test]
+    fn project_kill_preview_whole_group() {
+        let mut app = App::new(vec![ProcessInfo {
+            pid: 1,
+            ppid: 1,
+            name: "node".into(),
+            cpu: 0.0,
+            memory_bytes: 0,
+            ports: vec![],
+            command: None,
+            cwd: Some("/Users/me/my-app".into()),
+            run_time_secs: 0,
+            is_zombie: false,
+        }]);
+        app.toggle_project_view();
+        let preview = app.format_kill_preview(false);
+        assert!(preview.contains("project"));
+        assert!(preview.contains("my-app"));
     }
 
     #[test]

@@ -6,7 +6,8 @@ use ratatui::{
     Frame,
 };
 
-use super::app::App;
+use super::app::{App, ViewMode};
+use crate::project::summarize_group;
 
 const ACCENT: Color = Color::Cyan;
 const PORT: Color = Color::Yellow;
@@ -71,6 +72,11 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
     let viewport = area.height.saturating_sub(3) as usize;
     app.set_viewport_rows(viewport);
 
+    if app.in_project_list() {
+        draw_project_table(frame, app, area);
+        return;
+    }
+
     let header = Row::new(vec!["", "PID", "PROCESS", "PORT", "CPU", "MEM"])
         .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
 
@@ -111,6 +117,66 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
             .border_style(Style::default().fg(ACCENT))
             .title(Span::styled(
                 table_title(app),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+    );
+
+    frame.render_stateful_widget(table, area, &mut app.table_state);
+}
+
+fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
+    let header = Row::new(vec!["PROJECT", "PATH", "PROCS", "MEM", "PORTS"])
+        .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
+
+    let rows: Vec<Row> = app
+        .visible_project_groups()
+        .iter()
+        .map(|g| {
+            let s = summarize_group(g);
+            let ports = if s.ports.is_empty() {
+                "-".to_string()
+            } else {
+                s.ports
+                    .iter()
+                    .map(|port| format!(":{port}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            let mem_mb = s.memory_bytes as f64 / (1024.0 * 1024.0);
+            Row::new(vec![
+                Cell::from(g.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
+                Cell::from(g.path.clone()).style(Style::default().fg(MUTED)),
+                Cell::from(s.process_count.to_string()),
+                Cell::from(format!("{:.0} MB", mem_mb)).style(Style::default().fg(MEM)),
+                Cell::from(ports).style(Style::default().fg(PORT)),
+            ])
+        })
+        .collect();
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(16),
+            Constraint::Percentage(40),
+            Constraint::Length(8),
+            Constraint::Length(10),
+            Constraint::Length(18),
+        ],
+    )
+    .header(header)
+    .highlight_symbol(">")
+    .row_highlight_style(
+        Style::default()
+            .bg(ACCENT)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD),
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                project_table_title(app),
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             )),
     );
@@ -166,11 +232,33 @@ fn table_title(app: &App) -> String {
     } else {
         app.filtered.len()
     };
-    let mode = if app.tree_view { " tree " } else { " " };
-    if total == 0 {
-        format!(" Processes{mode}")
+    if app.view_mode == ViewMode::Projects && app.expanded_project.is_some() {
+        let name = app
+            .expanded_project
+            .and_then(|idx| app.project_groups.get(idx))
+            .map(|g| g.name.as_str())
+            .unwrap_or("project");
+        if total == 0 {
+            format!(" {name} members ")
+        } else {
+            format!(" {name} members [{} / {}] ", app.cursor + 1, total)
+        }
     } else {
-        format!(" Processes{mode}[{} / {}] ", app.cursor + 1, total)
+        let mode = if app.tree_view { " tree " } else { " " };
+        if total == 0 {
+            format!(" Processes{mode}")
+        } else {
+            format!(" Processes{mode}[{} / {}] ", app.cursor + 1, total)
+        }
+    }
+}
+
+fn project_table_title(app: &App) -> String {
+    let total = app.visible_project_groups().len();
+    if total == 0 {
+        " Projects ".to_string()
+    } else {
+        format!(" Projects [{} / {}] ", app.cursor + 1, total)
     }
 }
 
@@ -245,6 +333,11 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::raw(" Tree view  "),
         Span::styled(
+            "[P]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Projects  "),
+        Span::styled(
             "[i]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
@@ -261,7 +354,11 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         Span::raw(" Quit"),
     ]);
     let status = if app.status.is_empty() {
-        format!("{} processes", app.filtered.len())
+        if app.in_project_list() {
+            format!("{} projects", app.visible_project_groups().len())
+        } else {
+            format!("{} processes", app.filtered.len())
+        }
     } else {
         app.status.clone()
     };
