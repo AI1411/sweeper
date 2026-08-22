@@ -18,13 +18,15 @@ Binary name: `sw`
 sw           # TUI process browser
 sw node      # find by name
 sw :3000     # find by port
-sw ports     # list LISTEN ports
-sw top       # CPU / memory leaders
-sw clean     # propose leftovers (you confirm)
-sw history   # kill history
+sw ports     # list LISTEN ports (alias: p)
+sw top       # CPU / memory leaders (alias: t)
+sw clean     # propose leftovers (you confirm) (alias: c)
+sw history   # kill history (alias: h)
 sw history --last
 sw :3000 --force
 ```
+
+Short aliases: `sw p`, `sw t`, `sw c`, `sw h`, `sw proj`.
 
 ### TUI keys
 

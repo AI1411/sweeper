@@ -45,13 +45,18 @@ pub struct Cli {
 
 #[derive(Debug, ClapSubcommand)]
 enum RawSub {
+    #[command(visible_alias = "p")]
     Ports,
+    #[command(visible_alias = "t")]
     Top,
+    #[command(visible_alias = "c")]
     Clean,
+    #[command(visible_alias = "h")]
     History {
         #[arg(long)]
         last: bool,
     },
+    #[command(visible_alias = "proj")]
     Project {
         name: Option<String>,
     },
