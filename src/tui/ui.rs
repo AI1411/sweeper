@@ -116,8 +116,8 @@ fn draw_table(frame: &mut Frame, app: &App, area: Rect) {
         [
             Constraint::Length(2),
             Constraint::Length(8),
-            Constraint::Percentage(35),
-            Constraint::Length(14),
+            Constraint::Percentage(30),
+            Constraint::Length(18),
             Constraint::Length(8),
             Constraint::Length(10),
         ],
@@ -168,6 +168,11 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Force tree  "),
+        Span::styled(
+            "[p]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Ports  "),
         Span::styled(
             "[/]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),

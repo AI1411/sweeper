@@ -37,11 +37,7 @@ pub fn run() -> anyhow::Result<()> {
     let mut app = App::new(processes);
 
     let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        if let Ok(ports) = listening_ports() {
-            let _ = tx.send(Msg::Ports(ports));
-        }
-    });
+    spawn_port_loader(tx.clone());
 
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
@@ -51,7 +47,6 @@ pub fn run() -> anyhow::Result<()> {
             match msg {
                 Msg::Ports(ports) => {
                     app.apply_ports(&ports);
-                    app.status = format!("Loaded {} listening ports", ports.len());
                 }
             }
         }
@@ -64,7 +59,7 @@ pub fn run() -> anyhow::Result<()> {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
-                if handle_key(&mut app, key.code)? {
+                if handle_key(&mut app, key.code, &tx)? {
                     break Ok(());
                 }
             }
@@ -85,7 +80,17 @@ pub fn run() -> anyhow::Result<()> {
     result
 }
 
-fn handle_key(app: &mut App, code: KeyCode) -> anyhow::Result<bool> {
+fn spawn_port_loader(tx: mpsc::Sender<Msg>) {
+    thread::spawn(move || {
+        if let Ok(ports) = listening_ports() {
+            let _ = tx.send(Msg::Ports(ports));
+        } else {
+            let _ = tx.send(Msg::Ports(Vec::new()));
+        }
+    });
+}
+
+fn handle_key(app: &mut App, code: KeyCode, tx: &mpsc::Sender<Msg>) -> anyhow::Result<bool> {
     if app.searching {
         match code {
             KeyCode::Esc => {
@@ -122,9 +127,11 @@ fn handle_key(app: &mut App, code: KeyCode) -> anyhow::Result<bool> {
         KeyCode::Char('K') => kill_selection(app, true, false)?,
         KeyCode::Char('t') => kill_selection(app, false, true)?,
         KeyCode::Char('T') => kill_selection(app, true, true)?,
+        KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('r') => {
             app.refresh();
-            app.status = "Refreshed process list".into();
+            app.status = "Refreshing processes + ports…".into();
+            spawn_port_loader(tx.clone());
         }
         _ => {}
     }
