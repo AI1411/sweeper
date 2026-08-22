@@ -148,10 +148,19 @@ fn handle_key(
     }
 
     match code {
-        KeyCode::Char('q') | KeyCode::Esc => {
+        KeyCode::Char('q') => {
             app.should_quit = true;
             return Ok(true);
         }
+        KeyCode::Esc => {
+            if app.show_detail {
+                app.show_detail = false;
+            } else {
+                app.should_quit = true;
+                return Ok(true);
+            }
+        }
+        KeyCode::Enter | KeyCode::Char('i') => app.toggle_detail(),
         KeyCode::Char('/') => {
             app.searching = true;
         }
