@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
         Target::Ports(ps) => port::run_ports(&ps, force, tree)?,
         Target::Sub(SubCommand::Ports) => ports_list::run_ports_list()?,
         Target::Sub(SubCommand::Top) => top::run_top()?,
-        Target::Sub(SubCommand::Clean) => clean::run_clean(force)?,
+        Target::Sub(SubCommand::Clean { exclude }) => clean::run_clean(force, &exclude)?,
         Target::Sub(SubCommand::History { last }) => history::run_history(last)?,
         Target::Sub(SubCommand::Project { name }) => project::run_project(name, force)?,
         Target::Tui => tui::run()?,

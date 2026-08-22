@@ -12,7 +12,7 @@ pub enum Target {
 pub enum SubCommand {
     Ports,
     Top,
-    Clean,
+    Clean { exclude: Vec<String> },
     History { last: bool },
     Project { name: Option<String> },
 }
@@ -50,7 +50,11 @@ enum RawSub {
     #[command(visible_alias = "t")]
     Top,
     #[command(visible_alias = "c")]
-    Clean,
+    Clean {
+        /// Exclude candidates whose name or PID contains this pattern (repeatable)
+        #[arg(long = "exclude", value_name = "PATTERN")]
+        exclude: Vec<String>,
+    },
     #[command(visible_alias = "h")]
     History {
         #[arg(long)]
@@ -99,7 +103,7 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
         return match sub {
             RawSub::Ports => Target::Sub(SubCommand::Ports),
             RawSub::Top => Target::Sub(SubCommand::Top),
-            RawSub::Clean => Target::Sub(SubCommand::Clean),
+            RawSub::Clean { exclude } => Target::Sub(SubCommand::Clean { exclude }),
             RawSub::History { last } => Target::Sub(SubCommand::History { last }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
         };
