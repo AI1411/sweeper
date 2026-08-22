@@ -4,7 +4,8 @@
 #
 # Usage:
 #   ./scripts/create-github-issues.sh           # all numbered issues
-#   ./scripts/create-github-issues.sh post-mvp  # only 12+
+#   ./scripts/create-github-issues.sh post-mvp  # only 12–20
+#   ./scripts/create-github-issues.sh roadmap   # only 21+
 #   ./scripts/create-github-issues.sh mvp       # only 01–11
 set -euo pipefail
 
@@ -35,11 +36,14 @@ for file in "$ISSUES_DIR"/[0-9][0-9]-*.md; do
       (( num <= 11 )) || continue
       ;;
     post-mvp)
-      (( num >= 12 )) || continue
+      (( num >= 12 && num <= 20 )) || continue
+      ;;
+    roadmap)
+      (( num >= 21 )) || continue
       ;;
     all) ;;
     *)
-      echo "usage: $0 [all|mvp|post-mvp]" >&2
+      echo "usage: $0 [all|mvp|post-mvp|roadmap]" >&2
       exit 2
       ;;
   esac
