@@ -1,4 +1,4 @@
-use sweeper::clean::propose_leftovers;
+use sweeper::clean::{apply_excludes, propose_leftovers, CleanCandidate};
 use sweeper::ProcessInfo;
 
 fn proc(pid: u32, ppid: u32, name: &str) -> ProcessInfo {
@@ -20,7 +20,9 @@ fn proposes_dev_process_with_listen_port() {
     let listening = vec![(3000, 100)];
     let out = propose_leftovers(&procs, &listening);
     assert_eq!(out.len(), 1);
-    assert_eq!(out[0].pid, 100);
+    assert_eq!(out[0].process.pid, 100);
+    assert!(out[0].reasons.iter().any(|r| r == "listening"));
+    assert!(out[0].reasons.iter().any(|r| r == "name:node"));
 }
 
 #[test]
@@ -28,7 +30,8 @@ fn proposes_orphan_dev_process() {
     let procs = vec![proc(200, 1, "vite")];
     let out = propose_leftovers(&procs, &[]);
     assert_eq!(out.len(), 1);
-    assert_eq!(out[0].name, "vite");
+    assert_eq!(out[0].process.name, "vite");
+    assert!(out[0].reasons.iter().any(|r| r == "orphan-ppid"));
 }
 
 #[test]
@@ -51,4 +54,31 @@ fn matches_dev_name_case_insensitively() {
     let procs = vec![proc(500, 1, "Node")];
     let out = propose_leftovers(&procs, &[]);
     assert_eq!(out.len(), 1);
+}
+
+#[test]
+fn exclude_filters_by_name() {
+    let cands = vec![
+        CleanCandidate {
+            process: proc(1, 1, "node"),
+            reasons: vec!["orphan-ppid".into()],
+        },
+        CleanCandidate {
+            process: proc(2, 1, "python3"),
+            reasons: vec!["orphan-ppid".into()],
+        },
+    ];
+    let out = apply_excludes(cands, &["python".into()]);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].process.name, "node");
+}
+
+#[test]
+fn exclude_filters_by_pid() {
+    let cands = vec![CleanCandidate {
+        process: proc(1513, 1, "node"),
+        reasons: vec!["listening".into()],
+    }];
+    let out = apply_excludes(cands, &["1513".into()]);
+    assert!(out.is_empty());
 }

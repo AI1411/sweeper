@@ -52,7 +52,23 @@ fn short_alias_top() {
 #[test]
 fn short_alias_clean() {
     let cli = Cli::parse_from(["sw", "c"]);
-    assert_eq!(cli.target, Target::Sub(SubCommand::Clean));
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::Clean {
+            exclude: Vec::new()
+        })
+    );
+}
+
+#[test]
+fn clean_exclude_flag() {
+    let cli = Cli::parse_from(["sw", "clean", "--exclude", "python", "--exclude", "1513"]);
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::Clean {
+            exclude: vec!["python".into(), "1513".into()]
+        })
+    );
 }
 
 #[test]
@@ -102,7 +118,12 @@ fn subcommand_ports() {
 #[test]
 fn subcommand_clean() {
     let cli = Cli::parse_from(["sw", "clean"]);
-    assert_eq!(cli.target, Target::Sub(SubCommand::Clean));
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::Clean {
+            exclude: Vec::new()
+        })
+    );
 }
 
 #[test]

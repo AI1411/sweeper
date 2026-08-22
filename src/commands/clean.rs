@@ -1,4 +1,4 @@
-use crate::clean::propose_leftovers;
+use crate::clean::{apply_excludes, excludes_from_env, propose_leftovers};
 use crate::commands::confirm::confirm;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
@@ -6,25 +6,32 @@ use crate::process::list::list_processes;
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
 
-pub fn run_clean(force: bool) -> anyhow::Result<()> {
+pub fn run_clean(force: bool, exclude: &[String]) -> anyhow::Result<()> {
     let mut procs = list_processes();
     let ports = listening_ports().unwrap_or_default();
     merge_ports(&mut procs, &ports);
-    let proposals = propose_leftovers(&procs, &ports);
+    let mut proposals = propose_leftovers(&procs, &ports);
+    let mut excludes = excludes_from_env();
+    excludes.extend(exclude.iter().cloned());
+    proposals = apply_excludes(proposals, &excludes);
+
     println!("{}\n", style::header("Sweeper found possible leftovers:"));
     println!(
         "{} {} candidate processes",
         style::success("✓"),
         style::process_name(proposals.len())
     );
-    for p in &proposals {
+    for c in &proposals {
+        let p = &c.process;
         println!(
-            "  {} {} {} {} {:?}",
+            "  {} {} {} {} {:?}  {} {}",
             style::process_name(&p.name),
             style::dim("pid"),
             style::pid(p.pid),
             style::dim("ports"),
-            p.ports
+            p.ports,
+            style::dim("reasons:"),
+            style::warn(c.reasons.join(", "))
         );
     }
     if proposals.is_empty() {
@@ -34,7 +41,8 @@ pub fn run_clean(force: bool) -> anyhow::Result<()> {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
-    for p in proposals {
+    for c in proposals {
+        let p = c.process;
         if !confirm(&format!("Kill {} (pid {})?", p.name, p.pid))? {
             continue;
         }
