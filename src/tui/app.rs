@@ -28,6 +28,8 @@ pub struct App {
     pub viewport_rows: usize,
     /// When set, kill keys showed a preview and await `y` / `n` / Esc.
     pub confirming_kill: Option<PendingKill>,
+    /// Process detail panel for the current row.
+    pub show_detail: bool,
 }
 
 impl App {
@@ -46,6 +48,7 @@ impl App {
             table_state: TableState::default(),
             viewport_rows: 20,
             confirming_kill: None,
+            show_detail: false,
         };
         app.refilter();
         app
@@ -72,6 +75,78 @@ impl App {
 
     pub fn is_confirming_kill(&self) -> bool {
         self.confirming_kill.is_some()
+    }
+
+    pub fn toggle_detail(&mut self) {
+        if self.current_process().is_some() {
+            self.show_detail = !self.show_detail;
+        } else {
+            self.show_detail = false;
+        }
+    }
+
+    pub fn current_process(&self) -> Option<&ProcessInfo> {
+        self.filtered
+            .get(self.cursor)
+            .and_then(|i| self.processes.get(*i))
+    }
+
+    /// Multi-line detail text for the current row.
+    pub fn format_process_detail(&self) -> Vec<String> {
+        let p = match self.current_process() {
+            Some(p) => p,
+            None => return vec!["No process selected".into()],
+        };
+        let ports = if p.ports.is_empty() {
+            "-".into()
+        } else {
+            p.ports
+                .iter()
+                .map(|port| format!(":{port}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let cmd = p.command.as_deref().unwrap_or("-");
+        let cwd = p.cwd.as_deref().unwrap_or("-");
+        let project = crate::project::infer_project(p)
+            .map(|(name, _)| name)
+            .unwrap_or_else(|| "-".into());
+        let age = crate::clean::format_age(p.run_time_secs);
+        vec![
+            format!(
+                "{} pid {}  ppid {}  CPU {:.1}%  MEM {:.0} MB  Port {}  Started {}",
+                p.name,
+                p.pid,
+                p.ppid,
+                p.cpu,
+                p.memory_mb(),
+                ports,
+                age
+            ),
+            format!("Command: {cmd}"),
+            format!("CWD: {cwd}"),
+            format!("Parent: {}", Self::parent_chain(p, &self.processes)),
+            format!("Project: {project}"),
+        ]
+    }
+
+    fn parent_chain(proc: &ProcessInfo, procs: &[ProcessInfo]) -> String {
+        let mut ancestors = Vec::new();
+        let mut ppid = proc.ppid;
+        let mut depth = 0;
+        while ppid != 0 && depth < 12 {
+            if let Some(parent) = procs.iter().find(|x| x.pid == ppid) {
+                ancestors.push(parent.name.clone());
+                ppid = parent.ppid;
+            } else {
+                ancestors.push(format!("ppid {ppid}"));
+                break;
+            }
+            depth += 1;
+        }
+        ancestors.reverse();
+        ancestors.push(proc.name.clone());
+        ancestors.join(" → ")
     }
 
     pub fn sync_table_state(&mut self) {
@@ -464,5 +539,70 @@ mod tests {
             })
         );
         assert!(!app.is_confirming_kill());
+    }
+
+    #[test]
+    fn detail_panel_lines() {
+        let mut app = App::new(vec![ProcessInfo {
+            pid: 4812,
+            ppid: 4701,
+            name: "node".into(),
+            cpu: 12.4,
+            memory_bytes: 421 * 1024 * 1024,
+            ports: vec![3000],
+            command: Some("node ./next dev".into()),
+            cwd: Some("/Users/dev/my-app".into()),
+            run_time_secs: 8040,
+            is_zombie: false,
+        }]);
+        app.refilter();
+        let lines = app.format_process_detail();
+        assert!(lines[0].contains("4812"));
+        assert!(lines[0].contains(":3000"));
+        assert!(lines.iter().any(|l| l.contains("Command:")));
+        assert!(lines.iter().any(|l| l.contains("Project:")));
+    }
+
+    #[test]
+    fn parent_chain_builds_path() {
+        let procs = vec![
+            proc(1, "zsh", vec![]),
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "bun".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 3,
+                ppid: 2,
+                name: "node".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![3000],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        let mut app = App::new(procs);
+        app.move_down();
+        app.move_down();
+        let lines = app.format_process_detail();
+        assert!(lines.iter().any(|l| l.contains("zsh → bun → node")));
+    }
+
+    #[test]
+    fn toggle_detail_requires_selection() {
+        let mut app = App::new(vec![]);
+        app.toggle_detail();
+        assert!(!app.show_detail);
     }
 }

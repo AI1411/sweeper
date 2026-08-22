@@ -91,6 +91,7 @@ Launch with bare `sw`.
 | `T` | Preview SIGKILL + descendants; `y` confirms |
 | `y` / `n` / `Esc` | Confirm or cancel pending kill |
 | `p` | Toggle “listening ports only” filter |
+| `i` / `Enter` | Toggle process detail panel |
 | `r` | Refresh processes and ports |
 | `q` | Quit |
 

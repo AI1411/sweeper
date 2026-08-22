@@ -14,18 +14,25 @@ const MEM: Color = Color::Magenta;
 const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    let detail_rows = if app.show_detail { 5 } else { 0 };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3),
             Constraint::Min(5),
+            Constraint::Length(detail_rows),
             Constraint::Length(3),
         ])
         .split(frame.area());
 
     draw_search(frame, app, chunks[0]);
     draw_table(frame, app, chunks[1]);
-    draw_footer(frame, app, chunks[2]);
+    if app.show_detail && chunks.len() > 3 {
+        draw_detail(frame, app, chunks[2]);
+        draw_footer(frame, app, chunks[3]);
+    } else {
+        draw_footer(frame, app, chunks[2]);
+    }
 }
 
 fn draw_search(frame: &mut Frame, app: &App, area: Rect) {
@@ -150,6 +157,24 @@ fn table_title(app: &App) -> String {
     }
 }
 
+fn draw_detail(frame: &mut Frame, app: &App, area: Rect) {
+    let lines: Vec<Line> = app
+        .format_process_detail()
+        .into_iter()
+        .map(|l| Line::from(Span::styled(l, Style::default().fg(MUTED))))
+        .collect();
+    let widget = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                " Detail (i/Esc) ",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(widget, area);
+}
+
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     let help = Line::from(vec![
         Span::styled(
@@ -197,6 +222,11 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Ports  "),
+        Span::styled(
+            "[i]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Detail  "),
         Span::styled(
             "[/]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
