@@ -39,4 +39,12 @@ Suggested next features (high → medium).
 | 16 | `16-clean-reasons.md` | Sharpen `sw clean` (reasons + filters) | medium |
 | 17 | `17-memory-freed.md` | Report estimated memory freed after kill | medium |
 
-Suggested order: **12 → 13 → 14**, then **15 → 16 → 17**.
+## Quality (next)
+
+| # | File | Title | Priority |
+|---|---|---|---|
+| 18 | `18-kill-summary-port-release.md` | Kill summary: ports released + richer feedback | high |
+| 19 | `19-clean-reason-detail.md` | Human-readable `sw clean` reasons | high |
+| 20 | `20-tui-navigation-kill-preview.md` | TUI navigation (g/G) + kill preview | high |
+
+Suggested order: **18 → 19 → 20**.
