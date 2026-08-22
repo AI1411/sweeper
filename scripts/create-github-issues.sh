@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 # Create GitHub issues from docs/superpowers/issues/*.md
 # Requires: gh auth with permission to create issues.
+#
+# Usage:
+#   ./scripts/create-github-issues.sh           # all numbered issues
+#   ./scripts/create-github-issues.sh post-mvp  # only 12+
+#   ./scripts/create-github-issues.sh mvp       # only 01–11
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ISSUES_DIR="$ROOT/docs/superpowers/issues"
+MODE="${1:-all}"
 
 if ! gh auth status >/dev/null 2>&1; then
   echo "error: gh is not authenticated" >&2
@@ -12,23 +18,40 @@ if ! gh auth status >/dev/null 2>&1; then
 fi
 
 # Ensure labels exist
-for label in mvp; do
-  gh label create "$label" --color "0E8A16" --description "Sweeper MVP" 2>/dev/null || true
-done
+gh label create "mvp" --color "0E8A16" --description "Sweeper MVP" 2>/dev/null || true
+gh label create "post-mvp" --color "1D76DB" --description "Post-MVP enhancement" 2>/dev/null || true
+gh label create "enhancement" --color "a2eeef" --description "New feature or request" 2>/dev/null || true
 
 created=()
 
+shopt -s nullglob
 for file in "$ISSUES_DIR"/[0-9][0-9]-*.md; do
+  base="$(basename "$file")"
+  num="${base%%-*}"
+  num=$((10#$num))
+
+  case "$MODE" in
+    mvp)
+      (( num <= 11 )) || continue
+      ;;
+    post-mvp)
+      (( num >= 12 )) || continue
+      ;;
+    all) ;;
+    *)
+      echo "usage: $0 [all|mvp|post-mvp]" >&2
+      exit 2
+      ;;
+  esac
+
   title="$(awk '/^title:/{sub(/^title:[[:space:]]*/,""); gsub(/^"/,""); gsub(/"$/,""); print; exit}' "$file")"
   labels_raw="$(awk '/^labels:/{sub(/^labels:[[:space:]]*/,""); print; exit}' "$file")"
-  # body = file without YAML frontmatter
   body="$(awk '
     BEGIN { in_fm=0; done_fm=0 }
     /^---$/ && !done_fm { if (!in_fm) { in_fm=1; next } else { in_fm=0; done_fm=1; next } }
     !in_fm && done_fm { print }
   ' "$file")"
 
-  # Parse labels like [enhancement, mvp]
   labels_args=()
   labels_csv="$(echo "$labels_raw" | tr -d '[] ')"
   IFS=',' read -ra LABEL_ARR <<< "$labels_csv"
