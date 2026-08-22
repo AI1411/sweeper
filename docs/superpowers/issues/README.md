@@ -1,16 +1,18 @@
-# Sweeper MVP — GitHub Issues
+# Sweeper — GitHub Issues
 
-実装計画 [`../plans/2026-08-21-sweeper-mvp.md`](../plans/2026-08-21-sweeper-mvp.md) の Task 1–11 を Issue 化した定義です。
-
-この環境の GitHub トークンは **Issue 作成権限がない**ため、ローカルで次を実行してください。
+Issue definitions under this directory. Create them with:
 
 ```bash
 ./scripts/create-github-issues.sh
 ```
 
-前提: `gh` 認証済み、`repo` スコープで Issue 作成可能であること。
+Requires `gh` auth with permission to create issues (`repo` scope).
 
-| # | ファイル | タイトル |
+## MVP (done)
+
+Plan: [`../plans/2026-08-21-sweeper-mvp.md`](../plans/2026-08-21-sweeper-mvp.md)
+
+| # | File | Title |
 |---|---|---|
 | 1 | `01-scaffold.md` | Cargo scaffold + error types + ProcessInfo |
 | 2 | `02-cli-target.md` | CLI target resolution |
@@ -24,11 +26,17 @@
 | 10 | `10-tui.md` | TUI (ratatui) |
 | 11 | `11-ports-list-readme.md` | `sw ports` + README |
 
-依存関係:
+## Post-MVP
 
-```text
-1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
-         └───────────────┘
-```
+Suggested next features (high → medium).
 
-Task 3 は Task 4 と並列可。Task 5 は Task 4 の後。Task 6 は Task 3 必須。
+| # | File | Title | Priority |
+|---|---|---|---|
+| 12 | `12-project.md` | `sw project` group/kill by project | high |
+| 13 | `13-tree-kill.md` | Implement `--tree` process tree kill | high |
+| 14 | `14-tui-ports.md` | Show listening ports clearly in TUI | high |
+| 15 | `15-multi-port-ux.md` | Improve multi-port kill confirmation UX | medium |
+| 16 | `16-clean-reasons.md` | Sharpen `sw clean` (reasons + filters) | medium |
+| 17 | `17-memory-freed.md` | Report estimated memory freed after kill | medium |
+
+Suggested order: **12 → 13 → 14**, then **15 → 16 → 17**.
