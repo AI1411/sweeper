@@ -147,12 +147,8 @@ fn kill_named(groups: &[ProjectGroup], query: &str, force: bool) -> anyhow::Resu
             style::pid(p.pid),
             style::kill_outcome(outcome)
         );
-        outcomes.push((p.memory_bytes, outcome));
+        outcomes.push(crate::report::KillResult::new(p.memory_bytes, p.ports.clone(), outcome));
     }
-    let ok = outcomes
-        .iter()
-        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
-        .count();
-    crate::report::print_summary(ok, crate::report::freed_bytes(&outcomes));
+    crate::report::print_kill_summary(&outcomes);
     Ok(())
 }

@@ -53,13 +53,9 @@ pub fn run_name(query: &str, force: bool, tree: bool) -> anyhow::Result<()> {
     let mut outcomes = Vec::new();
     for p in targets {
         let outcome = kill_one(&p, force)?;
-        outcomes.push((p.memory_bytes, outcome));
+        outcomes.push(report::KillResult::new(p.memory_bytes, p.ports.clone(), outcome));
     }
-    let ok = outcomes
-        .iter()
-        .filter(|(_, o)| matches!(o, KillOutcome::Terminated | KillOutcome::ForceKilled))
-        .count();
-    report::print_summary(ok, report::freed_bytes(&outcomes));
+    report::print_kill_summary(&outcomes);
     Ok(())
 }
 

@@ -152,7 +152,7 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
     };
 
     let mut killed = 0;
-    let mut freed = 0u64;
+    let mut results = Vec::new();
     for pid in pids {
         let info = app.processes.iter().find(|p| p.pid == pid);
         let name = info.map(|p| p.name.clone()).unwrap_or_else(|| "?".into());
@@ -168,15 +168,16 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         let _ = append_entry(HistoryEntry::new(
             pid,
             &name,
-            ports,
+            ports.clone(),
             signal,
             format!("{outcome:?}"),
         ));
-        if matches!(outcome, KillOutcome::Terminated | KillOutcome::ForceKilled) {
+        let result = crate::report::KillResult::new(mem, ports, outcome);
+        if result.is_success() {
             killed += 1;
-            freed += mem;
         }
-        app.status = format!("{name} ({pid}): {outcome:?}");
+        app.status = format!("{name} ({pid}): {:?}", result.outcome);
+        results.push(result);
     }
 
     app.refresh();
@@ -184,8 +185,22 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         app.apply_ports(&ports);
     }
     let kind = if tree { "tree " } else { "" };
+    let freed = crate::report::freed_bytes_from_results(&results);
+    let released = crate::report::released_ports(&results);
     let mb = freed as f64 / (1024.0 * 1024.0);
-    app.status = format!("Killed {killed} {kind}process(es); ~{mb:.0} MB freed (estimate)");
+    let ports_hint = if released.is_empty() {
+        String::new()
+    } else {
+        let list = released
+            .iter()
+            .map(|p| format!(":{p}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("; ports {list}")
+    };
+    app.status = format!(
+        "Killed {killed} {kind}process(es); ~{mb:.0} MB freed (estimate){ports_hint}"
+    );
     let _ = io::Write::flush(&mut io::stdout());
     Ok(())
 }
