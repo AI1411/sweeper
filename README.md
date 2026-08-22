@@ -82,7 +82,8 @@ Launch with bare `sw`.
 | `K` | SIGKILL selected |
 | `t` | SIGTERM selected + descendants |
 | `T` | SIGKILL selected + descendants |
-| `r` | Refresh |
+| `p` | Toggle “listening ports only” filter |
+| `r` | Refresh processes and ports |
 | `q` | Quit |
 
 ## Safety
