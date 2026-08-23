@@ -2,9 +2,11 @@ use std::collections::HashSet;
 
 use ratatui::widgets::TableState;
 
+use crate::memory::{format_bytes, format_estimate};
 use crate::process::tree::{layout_tree_rows, TreeRow};
 use crate::process::ProcessInfo;
 use crate::project::{group_projects, summarize_group, ProjectGroup};
+use crate::tui::resources::{load_resource_snapshot, ResourcePanel, ResourceSnapshot};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
@@ -43,6 +45,10 @@ pub struct App {
     pub view_mode: ViewMode,
     pub project_groups: Vec<ProjectGroup>,
     pub expanded_project: Option<usize>,
+    pub resources_open: bool,
+    pub resource_panel: ResourcePanel,
+    pub resource_snapshot: ResourceSnapshot,
+    pub confirming_reclaim: bool,
 }
 
 impl App {
@@ -67,6 +73,10 @@ impl App {
             view_mode: ViewMode::Processes,
             project_groups: Vec::new(),
             expanded_project: None,
+            resources_open: false,
+            resource_panel: ResourcePanel::default(),
+            resource_snapshot: ResourceSnapshot::unavailable(),
+            confirming_reclaim: false,
         };
         app.refilter();
         app
@@ -95,8 +105,148 @@ impl App {
         self.confirming_kill.is_some()
     }
 
+    pub fn is_confirming_reclaim(&self) -> bool {
+        self.confirming_reclaim
+    }
+
+    pub fn request_reclaim_confirm(&mut self) {
+        if !self.resource_snapshot.available {
+            self.status = "OrbStack/Docker not available".into();
+            return;
+        }
+        let reclaim = self.resource_snapshot.memory_reclaimable.unwrap_or(0);
+        if reclaim == 0 {
+            self.status = "No reclaimable memory estimated".into();
+            return;
+        }
+        self.confirming_reclaim = true;
+        self.status = format!(
+            "Reclaim approximately {}? [y/N]",
+            crate::memory::format_estimate(reclaim)
+        );
+    }
+
+    pub fn cancel_reclaim_confirm(&mut self) {
+        self.confirming_reclaim = false;
+        self.status = "Reclaim cancelled".into();
+    }
+
+    pub fn apply_resource_snapshot(&mut self, snapshot: ResourceSnapshot) {
+        self.resource_snapshot = snapshot;
+        if self.resources_open && !self.resource_snapshot.available {
+            self.resources_open = false;
+            self.status = "OrbStack/Docker not detected".into();
+        }
+    }
+
+    pub fn toggle_resources_view(&mut self) {
+        if self.resources_open {
+            self.resources_open = false;
+            self.resource_panel = ResourcePanel::Summary;
+            self.confirming_reclaim = false;
+            self.status = "View: processes".into();
+            self.refilter();
+            return;
+        }
+        self.resources_open = true;
+        self.resource_panel = ResourcePanel::Summary;
+        self.view_mode = ViewMode::Processes;
+        self.show_detail = false;
+        self.tree_view = false;
+        self.expanded_project = None;
+        self.cursor = 0;
+        if !self.resource_snapshot.available {
+            self.resource_snapshot = load_resource_snapshot();
+        }
+        if !self.resource_snapshot.available {
+            self.resources_open = false;
+            self.status = "OrbStack/Docker not detected".into();
+            return;
+        }
+        self.status = "OrbStack [R] reclaim [C] containers [D] docker [Esc] back".into();
+    }
+
+    pub fn set_resource_panel(&mut self, panel: ResourcePanel) {
+        if !self.resources_open {
+            return;
+        }
+        self.resource_panel = panel;
+        self.cursor = 0;
+        match panel {
+            ResourcePanel::Summary => {
+                self.status = "OrbStack summary [R] reclaim [Esc] back".into();
+            }
+            ResourcePanel::Containers => {
+                self.status = format!(
+                    "{} container(s) [Esc] back",
+                    self.resource_snapshot.containers.len()
+                );
+            }
+            ResourcePanel::Docker => {
+                self.status = "Docker disk overview [Esc] back".into();
+            }
+        }
+    }
+
+    pub fn resource_lines(&self) -> Vec<String> {
+        let snap = &self.resource_snapshot;
+        match self.resource_panel {
+            ResourcePanel::Summary => {
+                let mut lines = vec!["OrbStack Memory".into(), "────────────────".into()];
+                if let Some(vm) = snap.orbstack_vm_bytes {
+                    lines.push(format!("VM Memory        {}", format_bytes(vm)));
+                }
+                lines.push(format!(
+                    "Containers       {}",
+                    format_bytes(snap.container_total_bytes)
+                ));
+                if let Some(r) = snap.memory_reclaimable {
+                    lines.push(format!("Reclaimable      {}", format_estimate(r)));
+                }
+                if let Some(est) = &snap.reclaim_estimate {
+                    lines.push(String::new());
+                    lines.push("Estimated sources:".into());
+                    lines.push(format!(
+                        "Linux page cache {}",
+                        format_estimate(est.page_cache_bytes)
+                    ));
+                    lines.push(format!(
+                        "Filesystem cache {}",
+                        format_estimate(est.filesystem_cache_bytes)
+                    ));
+                }
+                lines
+            }
+            ResourcePanel::Containers => {
+                let mut lines = vec!["Containers".into(), "────────────────".into()];
+                for c in &snap.containers {
+                    lines.push(format!("{:<16} {}", c.name, format_bytes(c.memory_bytes)));
+                }
+                lines
+            }
+            ResourcePanel::Docker => {
+                let mut lines = vec!["Docker Disk".into(), "────────────────".into()];
+                if let Some(disk) = &snap.disk_report {
+                    for row in &disk.rows {
+                        lines.push(format!(
+                            "{:<16} {}",
+                            row.kind,
+                            format_bytes(row.total_bytes)
+                        ));
+                    }
+                    lines.push(format!(
+                        "Reclaimable      {}",
+                        format_bytes(disk.reclaimable_bytes)
+                    ));
+                }
+                lines
+            }
+        }
+    }
+
     pub fn toggle_project_view(&mut self) {
         if self.view_mode == ViewMode::Processes {
+            self.resources_open = false;
             self.view_mode = ViewMode::Projects;
             self.tree_view = false;
             self.tree_rows.clear();
@@ -923,5 +1073,23 @@ mod tests {
         assert_eq!(app.tree_rows.len(), 3);
         app.move_down();
         assert_eq!(app.current_process().map(|p| p.name.as_str()), Some("node"));
+    }
+
+    #[test]
+    fn resources_view_with_snapshot() {
+        let mut app = App::new(vec![]);
+        app.resource_snapshot = ResourceSnapshot {
+            available: true,
+            orbstack_vm_bytes: Some(18_400_000_000),
+            memory_reclaimable: Some(12_800_000_000),
+            container_total_bytes: 2_500_000_000,
+            ..Default::default()
+        };
+        app.toggle_resources_view();
+        assert!(app.resources_open);
+        let lines = app.resource_lines();
+        assert!(lines.iter().any(|l| l.contains("VM Memory")));
+        app.set_resource_panel(ResourcePanel::Containers);
+        assert!(app.resource_lines().iter().any(|l| l == "Containers"));
     }
 }
