@@ -45,6 +45,7 @@ fn parses_proc_net_tcp_listen_line() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn ignores_proc_net_tcp_non_listen() {
     use sweeper::process::ports_native::parse_proc_net_tcp_line;
     let line = "  1: 0100007F:1F90 0100007F:3E8 01 00000000:00000000 00:00000000 00000000    1000        0 12346 1 00000000 20 4 30 10 -1";
@@ -52,6 +53,7 @@ fn ignores_proc_net_tcp_non_listen() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn listening_ports_native_on_linux() {
     sweeper::process::ports::listening_ports().expect("ports");
 }
