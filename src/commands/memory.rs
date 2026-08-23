@@ -3,8 +3,9 @@ use crate::json_output::{emit_json, MemoryJson, ReclaimJson, ReclaimResultJson};
 use crate::memory::{
     collect_memory_report, collect_memory_report_from, docker_available, estimate_reclaim,
     execute_reclaim, format_bytes, format_estimate, format_reclaim_analysis, format_reclaim_result,
-    high_memory_warnings, parse_warn_threshold, sort_containers, warn_threshold_bytes,
-    LiveReclaimBackend, MemoryReport, MemorySort, MemoryWarning, POSSIBLE_CAUSES,
+    high_memory_warnings, parse_warn_threshold, run_memory_watch, sort_containers,
+    warn_threshold_bytes, LiveReclaimBackend, MemoryReport, MemorySort, MemoryWarning,
+    POSSIBLE_CAUSES,
 };
 use crate::style;
 
@@ -17,6 +18,10 @@ pub fn run_memory(
 ) -> anyhow::Result<()> {
     match action {
         Some(crate::cli::MemoryAction::Reclaim) => run_memory_reclaim(dry_run, json),
+        Some(crate::cli::MemoryAction::Watch {
+            interval,
+            containers,
+        }) => run_memory_watch(interval, containers, json),
         None => run_memory_show(sort, warn_above, json),
     }
 }
