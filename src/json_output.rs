@@ -83,6 +83,16 @@ pub struct MemoryWarningJson {
 }
 
 #[derive(Debug, Serialize)]
+pub struct LeakCandidateJson {
+    pub container: String,
+    pub start_bytes: u64,
+    pub current_bytes: u64,
+    pub growth_bytes: u64,
+    pub elapsed_secs: u64,
+    pub start_label: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct MemoryJson {
     pub system: SystemMemoryJson,
     pub orbstack_vm_bytes: Option<u64>,
@@ -93,6 +103,7 @@ pub struct MemoryJson {
     pub possible_causes: Vec<&'static str>,
     pub warn_threshold_bytes: u64,
     pub warnings: Vec<MemoryWarningJson>,
+    pub leak_candidates: Vec<LeakCandidateJson>,
 }
 
 impl MemoryJson {
@@ -100,6 +111,7 @@ impl MemoryJson {
         report: &crate::memory::MemoryReport,
         warnings: &[crate::memory::MemoryWarning],
         warn_threshold_bytes: u64,
+        leaks: &[crate::memory::LeakCandidate],
     ) -> Self {
         Self {
             system: SystemMemoryJson {
@@ -130,13 +142,24 @@ impl MemoryJson {
                     kind: w.kind.to_string(),
                 })
                 .collect(),
+            leak_candidates: leaks
+                .iter()
+                .map(|l| LeakCandidateJson {
+                    container: l.container.clone(),
+                    start_bytes: l.start_bytes,
+                    current_bytes: l.current_bytes,
+                    growth_bytes: l.growth_bytes,
+                    elapsed_secs: l.elapsed_secs,
+                    start_label: l.start_label.clone(),
+                })
+                .collect(),
         }
     }
 }
 
 impl From<&crate::memory::MemoryReport> for MemoryJson {
     fn from(report: &crate::memory::MemoryReport) -> Self {
-        Self::from_report(report, &[], crate::memory::DEFAULT_WARN_BYTES)
+        Self::from_report(report, &[], crate::memory::DEFAULT_WARN_BYTES, &[])
     }
 }
 

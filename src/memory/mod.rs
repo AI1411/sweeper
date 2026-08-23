@@ -2,10 +2,14 @@ mod docker;
 mod format;
 mod orbstack;
 mod reclaim;
+mod snapshots;
 mod system;
 mod warnings;
 mod watch;
 
+pub use snapshots::{
+    detect_leaks, format_leak_candidates, load_leak_candidates, record_snapshot, LeakCandidate,
+};
 pub use watch::{collect_watch_sample, compute_delta, run_memory_watch, WatchDelta, WatchSample};
 
 pub use warnings::{

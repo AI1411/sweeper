@@ -33,6 +33,7 @@ fn main() -> anyhow::Result<()> {
             action,
             sort,
             warn_above,
+            leaks,
         }) => {
             let sort_field = match sort.as_deref() {
                 None => MemorySort::default(),
@@ -40,7 +41,7 @@ fn main() -> anyhow::Result<()> {
                     anyhow::anyhow!("invalid --sort value: {s} (use memory, name, or status)")
                 })?,
             };
-            memory::run_memory(action, sort_field, warn_above, dry_run, json)?
+            memory::run_memory(action, sort_field, warn_above, leaks, dry_run, json)?
         }
         Target::Tui => tui::run()?,
     }

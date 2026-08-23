@@ -2,10 +2,10 @@ use crate::commands::confirm::confirm;
 use crate::json_output::{emit_json, MemoryJson, ReclaimJson, ReclaimResultJson};
 use crate::memory::{
     collect_memory_report, collect_memory_report_from, docker_available, estimate_reclaim,
-    execute_reclaim, format_bytes, format_estimate, format_reclaim_analysis, format_reclaim_result,
-    high_memory_warnings, parse_warn_threshold, run_memory_watch, sort_containers,
-    warn_threshold_bytes, LiveReclaimBackend, MemoryReport, MemorySort, MemoryWarning,
-    POSSIBLE_CAUSES,
+    execute_reclaim, format_bytes, format_estimate, format_leak_candidates, format_reclaim_analysis,
+    format_reclaim_result, high_memory_warnings, load_leak_candidates, parse_warn_threshold,
+    record_snapshot, run_memory_watch, sort_containers, warn_threshold_bytes, LiveReclaimBackend,
+    MemoryReport, MemorySort, MemoryWarning, POSSIBLE_CAUSES,
 };
 use crate::style;
 
@@ -13,6 +13,7 @@ pub fn run_memory(
     action: Option<crate::cli::MemoryAction>,
     sort: MemorySort,
     warn_above: Option<String>,
+    leaks: bool,
     dry_run: bool,
     json: bool,
 ) -> anyhow::Result<()> {
@@ -22,11 +23,16 @@ pub fn run_memory(
             interval,
             containers,
         }) => run_memory_watch(interval, containers, json),
-        None => run_memory_show(sort, warn_above, json),
+        None => run_memory_show(sort, warn_above, leaks, json),
     }
 }
 
-fn run_memory_show(sort: MemorySort, warn_above: Option<String>, json: bool) -> anyhow::Result<()> {
+fn run_memory_show(
+    sort: MemorySort,
+    warn_above: Option<String>,
+    leaks: bool,
+    json: bool,
+) -> anyhow::Result<()> {
     let threshold = match warn_above.as_deref() {
         None => warn_threshold_bytes(None),
         Some(s) => {
@@ -37,11 +43,22 @@ fn run_memory_show(sort: MemorySort, warn_above: Option<String>, json: bool) -> 
     };
     let mut report = collect_memory_report()?;
     sort_containers(&mut report.containers, sort);
+    let _ = record_snapshot(&report);
+    let leak_candidates = if leaks {
+        load_leak_candidates().unwrap_or_default()
+    } else {
+        vec![]
+    };
     let warnings = high_memory_warnings(&report.containers, threshold);
     if json {
-        return emit_json(&MemoryJson::from_report(&report, &warnings, threshold));
+        return emit_json(
+            &MemoryJson::from_report(&report, &warnings, threshold, &leak_candidates),
+        );
     }
     print_report(&report, &warnings, threshold);
+    if !leak_candidates.is_empty() {
+        print!("{}", format_leak_candidates(&leak_candidates));
+    }
     Ok(())
 }
 
@@ -314,7 +331,7 @@ mod tests {
             MemorySort::Memory,
         )
         .unwrap();
-        let json = MemoryJson::from_report(&report, &[], DEFAULT_WARN_BYTES);
+        let json = MemoryJson::from_report(&report, &[], DEFAULT_WARN_BYTES, &[]);
         assert_eq!(json.containers.len(), 3);
         assert!(json.unattributed_bytes.unwrap() > 0);
         assert!(json.show_unattributed_warning);
