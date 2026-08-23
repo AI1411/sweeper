@@ -3,10 +3,10 @@ mod format;
 mod orbstack;
 mod reclaim;
 mod system;
-mod watch;
 mod warnings;
+mod watch;
 
-pub use watch::{compute_delta, collect_watch_sample, run_memory_watch, WatchDelta, WatchSample};
+pub use watch::{collect_watch_sample, compute_delta, run_memory_watch, WatchDelta, WatchSample};
 
 pub use warnings::{
     high_memory_warnings, parse_warn_threshold, warn_threshold_bytes, MemoryWarning,

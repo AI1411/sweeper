@@ -35,10 +35,7 @@ pub enum SubCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryAction {
     Reclaim,
-    Watch {
-        interval: u64,
-        containers: bool,
-    },
+    Watch { interval: u64, containers: bool },
 }
 
 #[derive(Debug, Parser)]

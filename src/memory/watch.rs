@@ -21,7 +21,9 @@ pub struct WatchDelta {
 }
 
 pub fn compute_delta(prev: &WatchSample, curr: &WatchSample) -> WatchDelta {
-    let elapsed_secs = (curr.timestamp - prev.timestamp).whole_seconds().unsigned_abs();
+    let elapsed_secs = (curr.timestamp - prev.timestamp)
+        .whole_seconds()
+        .unsigned_abs();
     let vm_delta_bytes = match (prev.vm_bytes, curr.vm_bytes) {
         (Some(a), Some(b)) => Some(b as i64 - a as i64),
         _ => None,
@@ -69,11 +71,7 @@ pub fn collect_watch_sample() -> WatchSample {
     }
 }
 
-pub fn run_memory_watch(
-    interval_secs: u64,
-    containers: bool,
-    json: bool,
-) -> anyhow::Result<()> {
+pub fn run_memory_watch(interval_secs: u64, containers: bool, json: bool) -> anyhow::Result<()> {
     let interval = Duration::from_secs(interval_secs.max(1));
     let mut prev: Option<WatchSample> = None;
     loop {
