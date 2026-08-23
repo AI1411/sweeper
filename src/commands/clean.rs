@@ -4,13 +4,14 @@ use crate::clean::{
 };
 use crate::commands::confirm::confirm;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::json_output::{emit_json, CleanCandidateJson, CleanJson, CleanSummaryJson};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
 
-pub fn run_clean(force: bool, exclude: &[String], dry_run: bool) -> anyhow::Result<()> {
+pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> anyhow::Result<()> {
     let mut procs = list_processes();
     let ports = listening_ports().unwrap_or_default();
     merge_ports(&mut procs, &ports);
@@ -20,6 +21,32 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool) -> anyhow::Resu
     proposals = apply_excludes(proposals, &excludes);
 
     let summary = summarize(&proposals);
+
+    if json {
+        let payload = CleanJson {
+            candidates: proposals
+                .iter()
+                .map(|c| CleanCandidateJson {
+                    pid: c.process.pid,
+                    name: c.process.name.clone(),
+                    ports: c.process.ports.clone(),
+                    memory_bytes: c.process.memory_bytes,
+                    reasons: format_reasons_display(c),
+                    confidence: confidence_level(c).into(),
+                })
+                .collect(),
+            summary: CleanSummaryJson {
+                stale_servers: summary.stale_servers,
+                orphans: summary.orphans,
+                zombies: summary.zombies,
+                idle_listeners: summary.idle_listeners,
+                listening: summary.listening,
+                estimated_bytes: summary.estimated_bytes,
+            },
+        };
+        return emit_json(&payload);
+    }
+
     println!("{}\n", style::header("Sweeper found possible leftovers:"));
     print_summary_lines(&summary, proposals.len());
 

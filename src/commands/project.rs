@@ -1,4 +1,5 @@
 use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::json_output::{emit_json, ProjectJson};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
@@ -8,16 +9,44 @@ use crate::style;
 
 use super::confirm::confirm;
 
-pub fn run_project(name: Option<String>, force: bool, dry_run: bool) -> anyhow::Result<()> {
+pub fn run_project(
+    name: Option<String>,
+    force: bool,
+    dry_run: bool,
+    json: bool,
+) -> anyhow::Result<()> {
     let mut procs = list_processes();
     let ports = listening_ports().unwrap_or_default();
     merge_ports(&mut procs, &ports);
     let groups = group_projects(&procs);
 
+    if json && name.is_none() {
+        return emit_json(&project_rows(&groups));
+    }
+
     match name {
         None => list_all(&groups),
         Some(q) => kill_named(&groups, &q, force, dry_run, &procs),
     }
+}
+
+fn project_rows(groups: &[ProjectGroup]) -> Vec<ProjectJson> {
+    groups
+        .iter()
+        .map(|g| {
+            let memory_bytes: u64 = g.processes.iter().map(|p| p.memory_bytes).sum();
+            let mut ports: Vec<u16> = g.processes.iter().flat_map(|p| p.ports.clone()).collect();
+            ports.sort_unstable();
+            ports.dedup();
+            ProjectJson {
+                name: g.name.clone(),
+                path: g.path.clone(),
+                process_count: g.processes.len(),
+                memory_bytes,
+                ports,
+            }
+        })
+        .collect()
 }
 
 fn list_all(groups: &[ProjectGroup]) -> anyhow::Result<()> {

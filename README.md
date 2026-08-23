@@ -71,6 +71,15 @@ sw project
 sw project my-app
 ```
 
+Scripting with JSON:
+
+```bash
+sw ports --json | jq '.[] | select(.port == 3000)'
+sw clean --json | jq '.candidates[].pid'
+sw project --json | jq '.[].name'
+sw history --json | jq '.[-1].pid'
+```
+
 ## Options
 
 | Flag | Description |
@@ -78,6 +87,7 @@ sw project my-app
 | `--force` | Allow SIGKILL when a process does not exit after SIGTERM |
 | `--tree` | Also kill descendants (PPID tree), children first |
 | `--dry-run` | Show kill targets without sending signals |
+| `--json` | Machine-readable JSON output (`ports`, `clean`, `project`, `history`) |
 | `-h`, `--help` | Print help |
 
 Flags may appear before or after targets:
