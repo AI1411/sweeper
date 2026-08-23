@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use sysinfo::{ProcessStatus, ProcessesToUpdate, System};
 
 use super::types::ProcessInfo;
@@ -41,6 +43,65 @@ pub fn list_processes() -> Vec<ProcessInfo> {
     out
 }
 
+/// Refresh CPU, memory, and liveness for an existing snapshot; add new PIDs and drop exited ones.
+pub fn refresh_process_list(procs: &mut Vec<ProcessInfo>) {
+    let mut sys = System::new_all();
+    sys.refresh_processes(ProcessesToUpdate::All, true);
+
+    let mut fresh_map: HashMap<u32, ProcessInfo> = HashMap::new();
+    for (pid, proc_) in sys.processes() {
+        let pid_u32 = pid.as_u32();
+        fresh_map.insert(
+            pid_u32,
+            ProcessInfo {
+                pid: pid_u32,
+                ppid: proc_.parent().map(|p| p.as_u32()).unwrap_or(0),
+                name: proc_.name().to_string_lossy().into_owned(),
+                cpu: proc_.cpu_usage(),
+                memory_bytes: proc_.memory(),
+                ports: Vec::new(),
+                command: {
+                    let args: Vec<String> = proc_
+                        .cmd()
+                        .iter()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .collect();
+                    if args.is_empty() {
+                        None
+                    } else {
+                        Some(args.join(" "))
+                    }
+                },
+                cwd: proc_.cwd().map(|p| p.to_string_lossy().into_owned()),
+                run_time_secs: proc_.run_time(),
+                is_zombie: matches!(proc_.status(), ProcessStatus::Zombie),
+            },
+        );
+    }
+
+    for p in procs.iter_mut() {
+        if let Some(fresh) = fresh_map.get(&p.pid) {
+            p.ppid = fresh.ppid;
+            p.name.clone_from(&fresh.name);
+            p.cpu = fresh.cpu;
+            p.memory_bytes = fresh.memory_bytes;
+            p.command.clone_from(&fresh.command);
+            p.cwd.clone_from(&fresh.cwd);
+            p.run_time_secs = fresh.run_time_secs;
+            p.is_zombie = fresh.is_zombie;
+        }
+    }
+
+    let alive: HashSet<u32> = fresh_map.keys().copied().collect();
+    let existing: HashSet<u32> = procs.iter().map(|p| p.pid).collect();
+    for (pid, fresh) in fresh_map {
+        if !existing.contains(&pid) {
+            procs.push(fresh);
+        }
+    }
+    procs.retain(|p| alive.contains(&p.pid));
+}
+
 /// Case-insensitive substring match against process name or command line.
 pub fn name_matches(query: &str, name: &str, command: Option<&str>) -> bool {
     let q = query.to_lowercase();
@@ -76,6 +137,17 @@ mod tests {
             Some("/usr/bin/node ./node_modules/.bin/vite")
         ));
         assert!(!name_matches("vite", "node", Some("node server.js")));
+    }
+
+    #[test]
+    fn refresh_process_list_keeps_known_pid() {
+        let mut procs = list_processes();
+        if procs.is_empty() {
+            return;
+        }
+        let pid = procs[0].pid;
+        refresh_process_list(&mut procs);
+        assert!(procs.iter().any(|p| p.pid == pid));
     }
 
     #[test]
