@@ -25,8 +25,6 @@ fn emit_json_ports_rows() {
 
 #[test]
 fn ports_list_json_integration() {
-    let mut buf = Vec::new();
-    // emit_json prints to stdout; test serialization path via ports_list internals
     let rows = vec![PortRow {
         port: 5173,
         pid: 42,
@@ -35,5 +33,4 @@ fn ports_list_json_integration() {
     let json = serde_json::to_string_pretty(&rows).expect("pretty");
     assert!(json.contains("\"port\": 5173"));
     assert!(emit_json(&rows).is_ok());
-    let _ = buf;
 }
