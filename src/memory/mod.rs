@@ -1,13 +1,18 @@
 mod docker;
 mod format;
 mod orbstack;
+mod reclaim;
 mod system;
 
 pub use docker::{
     docker_available, parse_container_stats, parse_container_stats_from, ContainerStat,
 };
-pub use format::{format_bytes, parse_docker_bytes};
+pub use format::{format_bytes, format_estimate, parse_docker_bytes};
 pub use orbstack::orbstack_vm_bytes;
+pub use reclaim::{
+    estimate_reclaim, execute_reclaim, format_reclaim_analysis, format_reclaim_result,
+    LiveReclaimBackend, ReclaimBackend, ReclaimEstimate, ReclaimResult,
+};
 pub use system::system_memory;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

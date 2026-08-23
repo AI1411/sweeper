@@ -12,10 +12,24 @@ pub enum Target {
 pub enum SubCommand {
     Ports,
     Top,
-    Clean { exclude: Vec<String> },
-    History { last: bool },
-    Project { name: Option<String> },
-    Memory { sort: Option<String> },
+    Clean {
+        exclude: Vec<String>,
+    },
+    History {
+        last: bool,
+    },
+    Project {
+        name: Option<String>,
+    },
+    Memory {
+        action: Option<MemoryAction>,
+        sort: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryAction {
+    Reclaim,
 }
 
 #[derive(Debug, Parser)]
@@ -88,10 +102,18 @@ enum RawSub {
     Project { name: Option<String> },
     #[command(visible_alias = "m")]
     Memory {
-        /// Sort containers by memory, name, or status
-        #[arg(long, value_name = "FIELD")]
+        #[command(subcommand)]
+        action: Option<RawMemoryAction>,
+        /// Sort containers by memory, name, or status (show mode)
+        #[arg(long, value_name = "FIELD", global = true)]
         sort: Option<String>,
     },
+}
+
+#[derive(Debug, ClapSubcommand)]
+enum RawMemoryAction {
+    /// Reclaim reclaimable OrbStack VM memory (requires confirmation)
+    Reclaim,
 }
 
 impl Cli {
@@ -142,7 +164,12 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             RawSub::Clean { exclude } => Target::Sub(SubCommand::Clean { exclude }),
             RawSub::History { last } => Target::Sub(SubCommand::History { last }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
-            RawSub::Memory { sort } => Target::Sub(SubCommand::Memory { sort }),
+            RawSub::Memory { action, sort } => Target::Sub(SubCommand::Memory {
+                action: action.map(|a| match a {
+                    RawMemoryAction::Reclaim => MemoryAction::Reclaim,
+                }),
+                sort,
+            }),
         };
     }
 

@@ -1,17 +1,89 @@
-use crate::json_output::{emit_json, MemoryJson};
+use crate::commands::confirm::confirm;
+use crate::json_output::{emit_json, MemoryJson, ReclaimJson, ReclaimResultJson};
 use crate::memory::{
-    collect_memory_report, collect_memory_report_from, docker_available, format_bytes,
-    sort_containers, MemoryReport, MemorySort, POSSIBLE_CAUSES,
+    collect_memory_report, collect_memory_report_from, docker_available, estimate_reclaim,
+    execute_reclaim, format_bytes, format_estimate, format_reclaim_analysis, format_reclaim_result,
+    sort_containers, LiveReclaimBackend, MemoryReport, MemorySort, POSSIBLE_CAUSES,
 };
 use crate::style;
 
-pub fn run_memory(sort: MemorySort, json: bool) -> anyhow::Result<()> {
+pub fn run_memory(
+    action: Option<crate::cli::MemoryAction>,
+    sort: MemorySort,
+    dry_run: bool,
+    json: bool,
+) -> anyhow::Result<()> {
+    match action {
+        Some(crate::cli::MemoryAction::Reclaim) => run_memory_reclaim(dry_run, json),
+        None => run_memory_show(sort, json),
+    }
+}
+
+fn run_memory_show(sort: MemorySort, json: bool) -> anyhow::Result<()> {
     let mut report = collect_memory_report()?;
     sort_containers(&mut report.containers, sort);
     if json {
         return emit_json(&MemoryJson::from(&report));
     }
     print_report(&report);
+    Ok(())
+}
+
+pub fn run_memory_reclaim(dry_run: bool, json: bool) -> anyhow::Result<()> {
+    if !cfg!(target_os = "macos") && !docker_available() {
+        anyhow::bail!(
+            "sw memory reclaim requires macOS with OrbStack/Docker or a running Docker daemon"
+        );
+    }
+    let report = collect_memory_report()?;
+    let estimate = estimate_reclaim(&report)
+        .ok_or_else(|| anyhow::anyhow!("OrbStack VM memory not detected; nothing to reclaim"))?;
+    if estimate.reclaimable_bytes == 0 {
+        anyhow::bail!("No reclaimable memory estimated");
+    }
+
+    if json {
+        let proposal = ReclaimJson::proposal(&estimate, dry_run);
+        if dry_run {
+            return emit_json(&proposal);
+        }
+        if !confirm(&format!(
+            "Reclaim approximately {}?",
+            format_estimate(estimate.reclaimable_bytes)
+        ))? {
+            println!("{}", style::dim("Cancelled."));
+            return Ok(());
+        }
+        let backend = LiveReclaimBackend;
+        let (_, result) = execute_reclaim(&backend, false)?;
+        let mut out = proposal;
+        out.result = result.map(ReclaimResultJson::from);
+        out.executed = true;
+        return emit_json(&out);
+    }
+
+    print!("{}", format_reclaim_analysis(&estimate));
+    if dry_run {
+        println!();
+        println!(
+            "{}",
+            style::dim("--dry-run: would drop Linux VM page/filesystem caches via Docker")
+        );
+        return Ok(());
+    }
+    println!();
+    if !confirm(&format!(
+        "Reclaim approximately {}?",
+        format_estimate(estimate.reclaimable_bytes)
+    ))? {
+        println!("{}", style::dim("Cancelled."));
+        return Ok(());
+    }
+    let backend = LiveReclaimBackend;
+    let (_, result) = execute_reclaim(&backend, false)?;
+    if let Some(result) = result {
+        print!("{}", format_reclaim_result(&result));
+    }
     Ok(())
 }
 
