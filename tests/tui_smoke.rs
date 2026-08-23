@@ -130,6 +130,16 @@ fn k_shows_kill_preview_in_status() {
 }
 
 #[test]
+fn orbstack_key_opens_resources_when_available() {
+    let mut app = App::new(vec![]);
+    app.resource_snapshot.available = true;
+    handle_test_key(&mut app, press(KeyCode::Char('o')));
+    assert!(app.resources_open);
+    handle_test_key(&mut app, press(KeyCode::Esc));
+    assert!(!app.resources_open);
+}
+
+#[test]
 fn draw_smoke_test_backend_layout() {
     let mut app = App::new(vec![
         proc(1, "node", vec![3000]),

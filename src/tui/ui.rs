@@ -16,10 +16,17 @@ const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let detail_rows = if app.show_detail { 5 } else { 0 };
+    let search_rows = if app.resources_open || !app.resource_snapshot.available {
+        3
+    } else if app.resource_snapshot.available {
+        6
+    } else {
+        3
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(search_rows),
             Constraint::Min(5),
             Constraint::Length(detail_rows),
             Constraint::Length(3),
@@ -39,24 +46,39 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 fn draw_search(frame: &mut Frame, app: &App, area: Rect) {
     let title = if app.searching {
         " Search (Esc to leave) "
+    } else if app.resources_open {
+        " OrbStack / Docker "
     } else {
         " Sweeper "
     };
-    let text = if app.searching || !app.query.is_empty() {
-        Line::from(vec![
+    let mut line_spans = Vec::new();
+    if app.searching || !app.query.is_empty() {
+        line_spans.push(Line::from(vec![
             Span::styled(
                 "/",
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::raw(app.query.clone()),
-        ])
-    } else {
-        Line::from(Span::styled(
+        ]));
+    } else if !app.resources_open {
+        line_spans.push(Line::from(Span::styled(
             "Press / to search",
             Style::default().fg(MUTED),
-        ))
-    };
-    let widget = Paragraph::new(text).block(
+        )));
+    }
+    if !app.resources_open && app.resource_snapshot.available {
+        if let Some(line) = app.resource_snapshot.summary_line() {
+            line_spans.push(Line::from(Span::styled(line, Style::default().fg(MEM))));
+        }
+        if let Some(line) = app.resource_snapshot.disk_summary_line() {
+            line_spans.push(Line::from(Span::styled(line, Style::default().fg(MUTED))));
+        }
+        line_spans.push(Line::from(Span::styled(
+            "Press o for OrbStack details",
+            Style::default().fg(MUTED),
+        )));
+    }
+    let widget = Paragraph::new(line_spans).block(
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(ACCENT))
@@ -71,6 +93,11 @@ fn draw_search(frame: &mut Frame, app: &App, area: Rect) {
 fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
     let viewport = area.height.saturating_sub(3) as usize;
     app.set_viewport_rows(viewport);
+
+    if app.resources_open {
+        draw_resources_panel(frame, app, area);
+        return;
+    }
 
     if app.in_project_list() {
         draw_project_table(frame, app, area);
@@ -122,6 +149,29 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
     );
 
     frame.render_stateful_widget(table, area, &mut app.table_state);
+}
+
+fn draw_resources_panel(frame: &mut Frame, app: &App, area: Rect) {
+    let lines: Vec<Line> = app
+        .resource_lines()
+        .into_iter()
+        .map(|l| Line::from(Span::raw(l)))
+        .collect();
+    let title = match app.resource_panel {
+        super::resources::ResourcePanel::Summary => " OrbStack summary ",
+        super::resources::ResourcePanel::Containers => " Containers ",
+        super::resources::ResourcePanel::Docker => " Docker disk ",
+    };
+    let widget = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                title,
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+    );
+    frame.render_widget(widget, area);
 }
 
 fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -337,6 +387,11 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
         Span::raw(" Projects  "),
+        Span::styled(
+            "[o]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" OrbStack  "),
         Span::styled(
             "[i]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),

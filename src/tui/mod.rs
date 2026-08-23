@@ -3,6 +3,8 @@ pub mod ui;
 
 pub use app::App;
 
+pub mod resources;
+
 use std::io::{self, stdout};
 use std::sync::mpsc;
 use std::thread;
@@ -24,6 +26,7 @@ use crate::process::tree::collect_tree_pids;
 
 enum Msg {
     Ports(Vec<(u16, u32)>),
+    Resources(Box<crate::tui::resources::ResourceSnapshot>),
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -38,6 +41,7 @@ pub fn run() -> anyhow::Result<()> {
 
     let (tx, rx) = mpsc::channel();
     spawn_port_loader(tx.clone());
+    spawn_resource_loader(tx.clone());
 
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
@@ -47,6 +51,9 @@ pub fn run() -> anyhow::Result<()> {
             match msg {
                 Msg::Ports(ports) => {
                     app.apply_ports(&ports);
+                }
+                Msg::Resources(snapshot) => {
+                    app.apply_resource_snapshot(*snapshot);
                 }
             }
         }
@@ -80,6 +87,13 @@ pub fn run() -> anyhow::Result<()> {
     result
 }
 
+fn spawn_resource_loader(tx: mpsc::Sender<Msg>) {
+    thread::spawn(move || {
+        let snapshot = crate::tui::resources::load_resource_snapshot();
+        let _ = tx.send(Msg::Resources(Box::new(snapshot)));
+    });
+}
+
 fn spawn_port_loader(tx: mpsc::Sender<Msg>) {
     thread::spawn(move || {
         if let Ok(ports) = listening_ports_cached(false) {
@@ -97,6 +111,19 @@ fn handle_key(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
 ) -> anyhow::Result<bool> {
     if key.kind != KeyEventKind::Press {
+        return Ok(false);
+    }
+    if app.is_confirming_reclaim() {
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                app.confirming_reclaim = false;
+                run_reclaim(app)?;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                app.cancel_reclaim_confirm();
+            }
+            _ => {}
+        }
         return Ok(false);
     }
     if app.is_confirming_kill() {
@@ -195,7 +222,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
             return true;
         }
         KeyCode::Esc => {
-            if app.show_detail {
+            if app.resources_open {
+                app.toggle_resources_view();
+            } else if app.show_detail {
                 app.show_detail = false;
             } else if app.expanded_project.is_some() {
                 app.collapse_project();
@@ -229,6 +258,14 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('e') => app.toggle_tree_view(),
         KeyCode::Char('P') => app.toggle_project_view(),
+        KeyCode::Char('o') | KeyCode::Char('O') => app.toggle_resources_view(),
+        KeyCode::Char('R') if app.resources_open => app.request_reclaim_confirm(),
+        KeyCode::Char('C') if app.resources_open => {
+            app.set_resource_panel(crate::tui::resources::ResourcePanel::Containers);
+        }
+        KeyCode::Char('D') if app.resources_open => {
+            app.set_resource_panel(crate::tui::resources::ResourcePanel::Docker);
+        }
         _ => {}
     }
     false
@@ -307,6 +344,27 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
     };
     app.status =
         format!("Killed {killed} {kind}process(es); ~{mb:.0} MB freed (estimate){ports_hint}");
+    let _ = io::Write::flush(&mut io::stdout());
+    Ok(())
+}
+
+fn run_reclaim(app: &mut App) -> anyhow::Result<()> {
+    use crate::memory::{execute_reclaim, format_bytes, format_reclaim_result, LiveReclaimBackend};
+    let backend = LiveReclaimBackend;
+    match execute_reclaim(&backend, false) {
+        Ok((_, Some(result))) => {
+            app.status = if result.success {
+                format!("Reclaimed {}", format_bytes(result.recovered_bytes))
+            } else {
+                "Reclaim completed with no measurable reduction".into()
+            };
+            app.resource_snapshot = crate::tui::resources::load_resource_snapshot();
+            let _ =
+                io::Write::write_all(&mut io::stdout(), format_reclaim_result(&result).as_bytes());
+        }
+        Err(e) => app.status = format!("Reclaim failed: {e}"),
+        Ok((_, None)) => app.status = "Reclaim produced no result".into(),
+    }
     let _ = io::Write::flush(&mut io::stdout());
     Ok(())
 }
