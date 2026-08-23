@@ -22,9 +22,19 @@ Binary name: `sw`
 
 ## Install
 
+From source:
+
 ```bash
 cargo install --path .
 ```
+
+From a release tag:
+
+```bash
+cargo install --git https://github.com/AI1411/sweeper --tag v0.1.0
+```
+
+Prebuilt binaries for Linux (x86_64) and macOS (arm64 / x86_64) are attached to [GitHub Releases](https://github.com/AI1411/sweeper/releases). Download the archive for your platform, extract `sw`, and place it on your `PATH`.
 
 ## Quick start
 
