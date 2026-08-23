@@ -1,5 +1,7 @@
 use sweeper::cli::{Cli, SubCommand, Target};
-use sweeper::commands::{clean, disk, history, memory, name, port, ports_list, project, top};
+use sweeper::commands::{
+    clean, disk, docker, history, memory, name, port, ports_list, project, top,
+};
 use sweeper::json_output;
 use sweeper::memory::MemorySort;
 use sweeper::tui;
@@ -26,6 +28,7 @@ fn main() -> anyhow::Result<()> {
             project::run_project(name, force, dry_run, json)?
         }
         Target::Sub(SubCommand::Disk { top }) => disk::run_disk(top, json)?,
+        Target::Sub(SubCommand::Docker) => docker::run_docker(json)?,
         Target::Sub(SubCommand::Memory {
             action,
             sort,

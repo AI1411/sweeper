@@ -232,3 +232,28 @@ impl From<&crate::disk::DockerDiskReport> for DiskJson {
         }
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct DockerOverviewJson {
+    pub orbstack_vm_bytes: Option<u64>,
+    pub container_total_bytes: u64,
+    pub memory_reclaimable_bytes: Option<u64>,
+    pub disk: DiskJson,
+    pub disk_reclaimable_bytes: u64,
+}
+
+impl DockerOverviewJson {
+    pub fn from(
+        memory: &crate::memory::MemoryReport,
+        reclaim: Option<&crate::memory::ReclaimEstimate>,
+        disk: &crate::disk::DockerDiskReport,
+    ) -> Self {
+        Self {
+            orbstack_vm_bytes: memory.orbstack_vm_bytes,
+            container_total_bytes: memory.container_total_bytes,
+            memory_reclaimable_bytes: reclaim.map(|r| r.reclaimable_bytes),
+            disk: DiskJson::from(disk),
+            disk_reclaimable_bytes: disk.reclaimable_bytes,
+        }
+    }
+}

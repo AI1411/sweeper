@@ -32,12 +32,16 @@ pub fn parse_docker_system_df(output: &str) -> anyhow::Result<DockerDiskReport> 
             continue;
         }
         let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() < 4 {
+        if parts.len() < 5 {
             continue;
         }
-        let kind = parts[0].to_string();
-        let total_bytes = parse_size_token(parts[3])?;
-        let reclaimable_bytes = parts.get(4).and_then(|r| parse_reclaimable_token(r));
+        let mut end = parts.len();
+        if parts[end - 1].starts_with('(') {
+            end -= 1;
+        }
+        let reclaimable_bytes = parse_reclaimable_token(parts[end - 1]);
+        let total_bytes = parse_size_token(parts[end - 2])?;
+        let kind = parts[..end - 4].join(" ");
         rows.push(DockerDiskRow {
             kind,
             total_bytes,
