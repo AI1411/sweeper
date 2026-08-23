@@ -18,7 +18,20 @@ pub enum SubCommand {
 }
 
 #[derive(Debug, Parser)]
-#[command(name = "sw", about = "Sweep unwanted processes away")]
+#[command(
+    name = "sw",
+    about = "Sweep unwanted processes away",
+    long_about = "Sweeper (sw) — developer-focused process browser and safe killer.\n\n\
+Safety: default SIGTERM; SIGKILL only with --force or TUI K. Protected system daemons \
+cannot be killed. sw clean proposes leftovers — it never auto-kills.\n\n\
+Examples:\n  \
+sw                  TUI browser\n  \
+sw node             find by name\n  \
+sw :3000            find by port\n  \
+sw ports --json     machine-readable ports\n  \
+sw clean            review leftover candidates\n\n\
+See docs/sw.1.md or README for full TUI keybindings."
+)]
 pub struct CliArgs {
     /// Use SIGKILL when needed / requested
     #[arg(long, global = true)]
