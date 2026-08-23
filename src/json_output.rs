@@ -76,6 +76,13 @@ pub struct ContainerMemoryJson {
 }
 
 #[derive(Debug, Serialize)]
+pub struct MemoryWarningJson {
+    pub container: String,
+    pub memory_bytes: u64,
+    pub kind: String,
+}
+
+#[derive(Debug, Serialize)]
 pub struct MemoryJson {
     pub system: SystemMemoryJson,
     pub orbstack_vm_bytes: Option<u64>,
@@ -84,10 +91,16 @@ pub struct MemoryJson {
     pub unattributed_bytes: Option<u64>,
     pub show_unattributed_warning: bool,
     pub possible_causes: Vec<&'static str>,
+    pub warn_threshold_bytes: u64,
+    pub warnings: Vec<MemoryWarningJson>,
 }
 
-impl From<&crate::memory::MemoryReport> for MemoryJson {
-    fn from(report: &crate::memory::MemoryReport) -> Self {
+impl MemoryJson {
+    pub fn from_report(
+        report: &crate::memory::MemoryReport,
+        warnings: &[crate::memory::MemoryWarning],
+        warn_threshold_bytes: u64,
+    ) -> Self {
         Self {
             system: SystemMemoryJson {
                 total_bytes: report.system.total_bytes,
@@ -108,7 +121,22 @@ impl From<&crate::memory::MemoryReport> for MemoryJson {
             unattributed_bytes: report.unattributed_bytes,
             show_unattributed_warning: report.show_unattributed_warning,
             possible_causes: crate::memory::POSSIBLE_CAUSES.to_vec(),
+            warn_threshold_bytes,
+            warnings: warnings
+                .iter()
+                .map(|w| MemoryWarningJson {
+                    container: w.container.clone(),
+                    memory_bytes: w.memory_bytes,
+                    kind: w.kind.to_string(),
+                })
+                .collect(),
         }
+    }
+}
+
+impl From<&crate::memory::MemoryReport> for MemoryJson {
+    fn from(report: &crate::memory::MemoryReport) -> Self {
+        Self::from_report(report, &[], crate::memory::DEFAULT_WARN_BYTES)
     }
 }
 

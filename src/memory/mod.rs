@@ -3,6 +3,12 @@ mod format;
 mod orbstack;
 mod reclaim;
 mod system;
+mod warnings;
+
+pub use warnings::{
+    high_memory_warnings, parse_warn_threshold, warn_threshold_bytes, MemoryWarning,
+    DEFAULT_WARN_BYTES,
+};
 
 pub use docker::{
     docker_available, parse_container_stats, parse_container_stats_from, ContainerStat,

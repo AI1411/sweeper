@@ -25,14 +25,18 @@ fn main() -> anyhow::Result<()> {
         Target::Sub(SubCommand::Project { name }) => {
             project::run_project(name, force, dry_run, json)?
         }
-        Target::Sub(SubCommand::Memory { action, sort }) => {
+        Target::Sub(SubCommand::Memory {
+            action,
+            sort,
+            warn_above,
+        }) => {
             let sort_field = match sort.as_deref() {
                 None => MemorySort::default(),
                 Some(s) => MemorySort::parse(s).ok_or_else(|| {
                     anyhow::anyhow!("invalid --sort value: {s} (use memory, name, or status)")
                 })?,
             };
-            memory::run_memory(action, sort_field, dry_run, json)?
+            memory::run_memory(action, sort_field, warn_above, dry_run, json)?
         }
         Target::Tui => tui::run()?,
     }
