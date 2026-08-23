@@ -13,6 +13,11 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
+/// Estimated value prefix for heuristic reclaim figures.
+pub fn format_estimate(bytes: u64) -> String {
+    format!("~{}", format_bytes(bytes))
+}
+
 /// Parse Docker-style memory strings (`1.2GiB`, `420MiB`, `850KiB`).
 pub fn parse_docker_bytes(input: &str) -> Option<u64> {
     let s = input.trim();

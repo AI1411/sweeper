@@ -111,3 +111,64 @@ impl From<&crate::memory::MemoryReport> for MemoryJson {
         }
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct ReclaimEstimateJson {
+    pub vm_bytes: u64,
+    pub container_total_bytes: u64,
+    pub reclaimable_bytes: u64,
+    pub page_cache_bytes: u64,
+    pub filesystem_cache_bytes: u64,
+    pub other_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReclaimResultJson {
+    pub before_vm_bytes: u64,
+    pub after_vm_bytes: u64,
+    pub recovered_bytes: u64,
+    pub success: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReclaimJson {
+    pub estimate: ReclaimEstimateJson,
+    pub dry_run: bool,
+    pub executed: bool,
+    pub result: Option<ReclaimResultJson>,
+}
+
+impl ReclaimJson {
+    pub fn proposal(estimate: &crate::memory::ReclaimEstimate, dry_run: bool) -> Self {
+        Self {
+            estimate: ReclaimEstimateJson::from(estimate),
+            dry_run,
+            executed: false,
+            result: None,
+        }
+    }
+}
+
+impl From<&crate::memory::ReclaimEstimate> for ReclaimEstimateJson {
+    fn from(e: &crate::memory::ReclaimEstimate) -> Self {
+        Self {
+            vm_bytes: e.vm_bytes,
+            container_total_bytes: e.container_total_bytes,
+            reclaimable_bytes: e.reclaimable_bytes,
+            page_cache_bytes: e.page_cache_bytes,
+            filesystem_cache_bytes: e.filesystem_cache_bytes,
+            other_bytes: e.other_bytes,
+        }
+    }
+}
+
+impl From<crate::memory::ReclaimResult> for ReclaimResultJson {
+    fn from(r: crate::memory::ReclaimResult) -> Self {
+        Self {
+            before_vm_bytes: r.before_vm_bytes,
+            after_vm_bytes: r.after_vm_bytes,
+            recovered_bytes: r.recovered_bytes,
+            success: r.success,
+        }
+    }
+}
