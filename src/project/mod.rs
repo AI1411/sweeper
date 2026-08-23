@@ -93,6 +93,13 @@ fn is_systemish_path(path: &str) -> bool {
         "/var",
         "/dev",
         "/etc",
+        "/snap",
+        "/boot",
+        "/sys",
+        "/srv",
+        "/mnt",
+        "/media",
+        "/root",
         "/opt/cursor",
         "/home/ubuntu/.cursor-server",
         "/home/ubuntu/.cursor",
@@ -222,6 +229,8 @@ mod tests {
         let p = proc(1, "bash", Some("/usr/bin"), None);
         assert!(infer_project(&p).is_none());
         let p = proc(2, "node", Some("/home/ubuntu/.cursor-server/bin"), None);
+        assert!(infer_project(&p).is_none());
+        let p = proc(3, "snap", Some("/snap/firefox/current"), None);
         assert!(infer_project(&p).is_none());
     }
 
