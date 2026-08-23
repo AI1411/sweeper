@@ -1,31 +1,26 @@
-#[cfg(target_os = "macos")]
-/// Process names associated with the OrbStack Linux VM on macOS.
 const ORBSTACK_VM_PROCESS_NAMES: &[&str] = &["OrbStack", "Linux"];
+
+fn orbstack_vm_bytes_from_procs(procs: &[crate::process::ProcessInfo]) -> Option<u64> {
+    let mut best: u64 = 0;
+    for p in procs {
+        let name_l = p.name.to_lowercase();
+        if ORBSTACK_VM_PROCESS_NAMES
+            .iter()
+            .any(|hint| name_l.contains(&hint.to_lowercase()))
+        {
+            best = best.max(p.memory_bytes);
+        }
+    }
+    if best > 0 { Some(best) } else { None }
+}
 
 /// Estimate OrbStack VM memory from running processes (macOS only).
 pub fn orbstack_vm_bytes() -> Option<u64> {
-    #[cfg(not(target_os = "macos"))]
-    {
-        None
-    }
-    #[cfg(target_os = "macos")]
-    {
+    if cfg!(target_os = "macos") {
         let procs = crate::process::list::list_processes();
-        let mut best: u64 = 0;
-        for p in &procs {
-            let name_l = p.name.to_lowercase();
-            if ORBSTACK_VM_PROCESS_NAMES
-                .iter()
-                .any(|hint| name_l.contains(&hint.to_lowercase()))
-            {
-                best = best.max(p.memory_bytes);
-            }
-        }
-        if best > 0 {
-            Some(best)
-        } else {
-            None
-        }
+        orbstack_vm_bytes_from_procs(&procs)
+    } else {
+        None
     }
 }
 
@@ -62,17 +57,9 @@ mod tests {
                 is_zombie: false,
             },
         ];
-        // orbstack_vm_bytes uses list_processes(); test logic inline
-        let mut best = 0u64;
-        for p in &procs {
-            let name_l = p.name.to_lowercase();
-            if ORBSTACK_VM_PROCESS_NAMES
-                .iter()
-                .any(|hint| name_l.contains(&hint.to_lowercase()))
-            {
-                best = best.max(p.memory_bytes);
-            }
-        }
-        assert_eq!(best, 18_400_000_000);
+        assert_eq!(
+            orbstack_vm_bytes_from_procs(&procs),
+            Some(18_400_000_000)
+        );
     }
 }
