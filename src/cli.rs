@@ -24,6 +24,7 @@ pub enum SubCommand {
     Disk {
         top: Option<usize>,
     },
+    Docker,
     Memory {
         action: Option<MemoryAction>,
         sort: Option<String>,
@@ -103,13 +104,16 @@ enum RawSub {
         last: bool,
     },
     #[command(visible_alias = "proj")]
-    Project { name: Option<String> },
+    Project {
+        name: Option<String>,
+    },
     #[command(visible_alias = "d")]
     Disk {
         /// Show only the top N disk categories
         #[arg(long)]
         top: Option<usize>,
     },
+    Docker,
     #[command(visible_alias = "m")]
     Memory {
         #[command(subcommand)]
@@ -178,6 +182,7 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             RawSub::History { last } => Target::Sub(SubCommand::History { last }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
             RawSub::Disk { top } => Target::Sub(SubCommand::Disk { top }),
+            RawSub::Docker => Target::Sub(SubCommand::Docker),
             RawSub::Memory {
                 action,
                 sort,
