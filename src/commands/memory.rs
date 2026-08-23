@@ -3,29 +3,40 @@ use crate::json_output::{emit_json, MemoryJson, ReclaimJson, ReclaimResultJson};
 use crate::memory::{
     collect_memory_report, collect_memory_report_from, docker_available, estimate_reclaim,
     execute_reclaim, format_bytes, format_estimate, format_reclaim_analysis, format_reclaim_result,
-    sort_containers, LiveReclaimBackend, MemoryReport, MemorySort, POSSIBLE_CAUSES,
+    high_memory_warnings, parse_warn_threshold, sort_containers, warn_threshold_bytes,
+    LiveReclaimBackend, MemoryReport, MemorySort, MemoryWarning, POSSIBLE_CAUSES,
 };
 use crate::style;
 
 pub fn run_memory(
     action: Option<crate::cli::MemoryAction>,
     sort: MemorySort,
+    warn_above: Option<String>,
     dry_run: bool,
     json: bool,
 ) -> anyhow::Result<()> {
     match action {
         Some(crate::cli::MemoryAction::Reclaim) => run_memory_reclaim(dry_run, json),
-        None => run_memory_show(sort, json),
+        None => run_memory_show(sort, warn_above, json),
     }
 }
 
-fn run_memory_show(sort: MemorySort, json: bool) -> anyhow::Result<()> {
+fn run_memory_show(sort: MemorySort, warn_above: Option<String>, json: bool) -> anyhow::Result<()> {
+    let threshold = match warn_above.as_deref() {
+        None => warn_threshold_bytes(None),
+        Some(s) => {
+            let parsed = parse_warn_threshold(s)
+                .ok_or_else(|| anyhow::anyhow!("invalid --warn-above value: {s}"))?;
+            warn_threshold_bytes(Some(parsed))
+        }
+    };
     let mut report = collect_memory_report()?;
     sort_containers(&mut report.containers, sort);
+    let warnings = high_memory_warnings(&report.containers, threshold);
     if json {
-        return emit_json(&MemoryJson::from(&report));
+        return emit_json(&MemoryJson::from_report(&report, &warnings, threshold));
     }
-    print_report(&report);
+    print_report(&report, &warnings, threshold);
     Ok(())
 }
 
@@ -87,7 +98,11 @@ pub fn run_memory_reclaim(dry_run: bool, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn format_memory_report(report: &MemoryReport) -> String {
+pub fn format_memory_report(
+    report: &MemoryReport,
+    warnings: &[MemoryWarning],
+    threshold_bytes: u64,
+) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     writeln!(out, "{}", style::header("Memory")).unwrap();
@@ -202,11 +217,37 @@ pub fn format_memory_report(report: &MemoryReport) -> String {
         writeln!(out, "{}", style::dim("No running Docker containers.")).unwrap();
     }
 
+    if !warnings.is_empty() {
+        writeln!(out).unwrap();
+        writeln!(out, "{}", style::warn("⚠ High Memory Usage")).unwrap();
+        for w in warnings {
+            writeln!(
+                out,
+                "{:<20} {}",
+                style::process_name(&w.container),
+                style::warn(format_bytes(w.memory_bytes))
+            )
+            .unwrap();
+        }
+        writeln!(
+            out,
+            "{}",
+            style::dim(format!(
+                "Memory usage exceeds warning threshold ({}).",
+                format_bytes(threshold_bytes)
+            ))
+        )
+        .unwrap();
+    }
+
     out
 }
 
-fn print_report(report: &MemoryReport) {
-    print!("{}", format_memory_report(report));
+fn print_report(report: &MemoryReport, warnings: &[MemoryWarning], threshold_bytes: u64) {
+    print!(
+        "{}",
+        format_memory_report(report, warnings, threshold_bytes)
+    );
 }
 
 /// Build a report from injected data (tests / future backends).
@@ -226,7 +267,7 @@ pub fn report_from(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::SystemMemorySnapshot;
+    use crate::memory::{SystemMemorySnapshot, DEFAULT_WARN_BYTES};
 
     const STATS: &str =
         "postgres\t1.2GiB / 7.776GiB\nredis\t420MiB / 7.776GiB\napi\t850MiB / 7.776GiB\n";
@@ -250,7 +291,7 @@ mod tests {
             MemorySort::Memory,
         )
         .unwrap();
-        let text = format_memory_report(&report);
+        let text = format_memory_report(&report, &[], DEFAULT_WARN_BYTES);
         assert!(text.contains("System"));
         assert!(text.contains("OrbStack VM"));
         assert!(text.contains("postgres"));
@@ -268,7 +309,7 @@ mod tests {
             MemorySort::Memory,
         )
         .unwrap();
-        let json = MemoryJson::from(&report);
+        let json = MemoryJson::from_report(&report, &[], DEFAULT_WARN_BYTES);
         assert_eq!(json.containers.len(), 3);
         assert!(json.unattributed_bytes.unwrap() > 0);
         assert!(json.show_unattributed_warning);

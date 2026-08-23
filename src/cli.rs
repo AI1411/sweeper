@@ -24,6 +24,7 @@ pub enum SubCommand {
     Memory {
         action: Option<MemoryAction>,
         sort: Option<String>,
+        warn_above: Option<String>,
     },
 }
 
@@ -107,6 +108,9 @@ enum RawSub {
         /// Sort containers by memory, name, or status (show mode)
         #[arg(long, value_name = "FIELD", global = true)]
         sort: Option<String>,
+        /// Warn when container memory exceeds this threshold (e.g. 2gb, 2048mb)
+        #[arg(long = "warn-above", value_name = "BYTES|GB", global = true)]
+        warn_above: Option<String>,
     },
 }
 
@@ -164,11 +168,16 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             RawSub::Clean { exclude } => Target::Sub(SubCommand::Clean { exclude }),
             RawSub::History { last } => Target::Sub(SubCommand::History { last }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
-            RawSub::Memory { action, sort } => Target::Sub(SubCommand::Memory {
+            RawSub::Memory {
+                action,
+                sort,
+                warn_above,
+            } => Target::Sub(SubCommand::Memory {
                 action: action.map(|a| match a {
                     RawMemoryAction::Reclaim => MemoryAction::Reclaim,
                 }),
                 sort,
+                warn_above,
             }),
         };
     }
