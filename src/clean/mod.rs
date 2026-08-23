@@ -8,6 +8,9 @@ pub const STALE_SERVER_SECS: u64 = 4 * 60 * 60;
 /// An idle listener must run at least this long before it is flagged.
 pub const IDLE_LISTENER_SECS: u64 = 30 * 60;
 pub const IDLE_CPU_THRESHOLD: f32 = 0.5;
+/// Processes younger than this with recent CPU are treated as active dev sessions.
+pub const ACTIVE_SESSION_MAX_SECS: u64 = 15 * 60;
+pub const ACTIVE_CPU_THRESHOLD: f32 = 0.1;
 
 const NAME_HINTS: &[&str] = &[
     "node",
@@ -148,13 +151,22 @@ pub fn propose_leftovers(procs: &[ProcessInfo], listening: &[(u16, u32)]) -> Vec
                 acc.entry(*pid).or_default().push(*port);
                 acc
             });
+    let by_pid: HashMap<u32, &ProcessInfo> = procs.iter().map(|p| (p.pid, p)).collect();
 
     let mut out: Vec<CleanCandidate> = procs
         .iter()
         .filter(|p| !is_protected(&p.name))
         .filter_map(|p| {
             let (stack, stack_reason) = detect_dev_stack(p)?;
-            let reasons = collect_reasons(p, &listen_pids, &pid_set, &ports_by_pid, &stack_reason);
+            let parent = by_pid.get(&p.ppid).copied();
+            let reasons = collect_reasons(
+                p,
+                parent,
+                &listen_pids,
+                &pid_set,
+                &ports_by_pid,
+                &stack_reason,
+            );
             if reasons.is_empty() {
                 return None;
             }
@@ -267,8 +279,37 @@ fn detect_dev_stack(p: &ProcessInfo) -> Option<(String, String)> {
     None
 }
 
+/// Heuristics for an in-progress dev session (not a leftover).
+///
+/// - `run_time < 15m` and `CPU >= 0.1%` → likely active (not stale / orphan)
+/// - Parent is an interactive shell (`zsh`, `bash`, `fish`) and process is young → likely active
+pub fn is_likely_active_session(p: &ProcessInfo, parent: Option<&ProcessInfo>) -> bool {
+    let young = p.run_time_secs < ACTIVE_SESSION_MAX_SECS;
+    if !young {
+        return false;
+    }
+    if p.cpu >= ACTIVE_CPU_THRESHOLD {
+        return true;
+    }
+    if let Some(parent) = parent {
+        if is_interactive_shell(&parent.name) {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_interactive_shell(name: &str) -> bool {
+    let n = name.to_lowercase();
+    matches!(
+        n.as_str(),
+        "zsh" | "bash" | "fish" | "sh" | "dash" | "tmux" | "screen"
+    )
+}
+
 fn collect_reasons(
     p: &ProcessInfo,
+    parent: Option<&ProcessInfo>,
     listen_pids: &HashSet<u32>,
     pid_set: &HashSet<u32>,
     ports_by_pid: &HashMap<u32, Vec<u16>>,
@@ -276,11 +317,14 @@ fn collect_reasons(
 ) -> Vec<String> {
     let mut reasons = vec![stack_reason.to_string()];
     let listening = listen_pids.contains(&p.pid);
-    let orphan_ppid = p.ppid == 0 || p.ppid == 1;
-    let orphan_parent = p.ppid != 0 && !pid_set.contains(&p.ppid);
-    let stale = listening && p.run_time_secs >= STALE_SERVER_SECS;
-    let idle_listener =
-        listening && p.run_time_secs >= IDLE_LISTENER_SECS && p.cpu < IDLE_CPU_THRESHOLD;
+    let active_session = is_likely_active_session(p, parent);
+    let orphan_ppid = !active_session && (p.ppid == 0 || p.ppid == 1);
+    let orphan_parent = !active_session && p.ppid != 0 && !pid_set.contains(&p.ppid);
+    let stale = !active_session && listening && p.run_time_secs >= STALE_SERVER_SECS;
+    let idle_listener = !active_session
+        && listening
+        && p.run_time_secs >= IDLE_LISTENER_SECS
+        && p.cpu < IDLE_CPU_THRESHOLD;
     let listen_ports = ports_by_pid.get(&p.pid).cloned().unwrap_or_default();
     let dev_port = p
         .ports
@@ -572,5 +616,43 @@ mod tests {
             reasons: vec!["idle-listener".into()],
         };
         assert_eq!(confidence_level(&c), "medium");
+    }
+
+    #[test]
+    fn active_session_young_high_cpu() {
+        let p = proc_with(1, 1, "node", 5.0, 120, vec![3000], None);
+        assert!(is_likely_active_session(&p, None));
+    }
+
+    #[test]
+    fn active_session_young_shell_parent() {
+        let parent = proc_with(42, 1, "zsh", 0.0, 3600, vec![], None);
+        let child = proc_with(100, 42, "node", 0.0, 120, vec![3000], None);
+        assert!(is_likely_active_session(&child, Some(&parent)));
+    }
+
+    #[test]
+    fn not_active_session_when_old() {
+        let p = proc_with(1, 1, "node", 5.0, ACTIVE_SESSION_MAX_SECS, vec![3000], None);
+        assert!(!is_likely_active_session(&p, None));
+    }
+
+    #[test]
+    fn skips_young_launchd_listener_with_cpu() {
+        let procs = vec![proc_with(400, 1, "node", 5.0, 120, vec![3000], None)];
+        let listening = vec![(3000, 400)];
+        let out = propose_leftovers(&procs, &listening);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn skips_young_listener_under_interactive_shell() {
+        let procs = vec![
+            proc_with(42, 1, "bash", 0.0, 3600, vec![], None),
+            proc_with(400, 42, "node", 0.0, 120, vec![3000], None),
+        ];
+        let listening = vec![(3000, 400)];
+        let out = propose_leftovers(&procs, &listening);
+        assert!(out.is_empty());
     }
 }

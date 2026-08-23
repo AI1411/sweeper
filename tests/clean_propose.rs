@@ -255,6 +255,31 @@ fn detects_eslint_server_from_command_line() {
 }
 
 #[test]
+fn skips_young_active_launchd_orphan() {
+    let procs = vec![proc(410, 1, "node", 5.0, 120, vec![3000], None)];
+    let listening = vec![(3000, 410)];
+    let out = propose_leftovers(&procs, &listening);
+    assert!(out.is_empty());
+}
+
+#[test]
+fn still_proposes_stale_launchd_orphan() {
+    let procs = vec![proc(
+        420,
+        1,
+        "node",
+        0.0,
+        STALE_SERVER_SECS,
+        vec![3000],
+        None,
+    )];
+    let listening = vec![(3000, 420)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "stale-server"));
+}
+
+#[test]
 fn skips_postgres_and_redis_without_stale_signals() {
     let procs = vec![
         proc(905, 1, "postgres", 2.0, 3600, vec![5432], None),
