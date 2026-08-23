@@ -289,3 +289,35 @@ impl DockerOverviewJson {
         }
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct CacheEntryJson {
+    pub name: String,
+    pub path: String,
+    pub size_bytes: u64,
+    pub approximate: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CacheJson {
+    pub entries: Vec<CacheEntryJson>,
+    pub total_bytes: u64,
+}
+
+impl CacheJson {
+    pub fn from_entries(entries: &[crate::cache::CacheEntry]) -> Self {
+        let total_bytes = entries.iter().map(|e| e.size_bytes).sum();
+        Self {
+            entries: entries
+                .iter()
+                .map(|e| CacheEntryJson {
+                    name: e.name.clone(),
+                    path: e.path.display().to_string(),
+                    size_bytes: e.size_bytes,
+                    approximate: e.approximate,
+                })
+                .collect(),
+            total_bytes,
+        }
+    }
+}
