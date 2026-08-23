@@ -128,6 +128,8 @@ CLI and TUI use color when stdout is a TTY. Set `NO_COLOR` to disable.
 
 ## Development
 
+Port lookup uses native OS APIs by default (`/proc/net/tcp` on Linux, `libproc` on macOS). If native lookup fails, Sweeper falls back to `lsof` and prints a one-line note.
+
 ```bash
 cargo test
 cargo clippy --all-targets -- -D warnings

@@ -1,7 +1,17 @@
 use std::process::Command;
+use std::sync::Once;
 
 use crate::error::{Result, SweeperError};
+use crate::process::ports_native;
 use crate::process::ProcessInfo;
+
+static LSOF_FALLBACK_HINT: Once = Once::new();
+
+fn hint_lsof_fallback() {
+    LSOF_FALLBACK_HINT.call_once(|| {
+        eprintln!("note: native port lookup unavailable; falling back to lsof");
+    });
+}
 
 /// Parse one `lsof -nP -iTCP -sTCP:LISTEN` style line → (pid, port)
 pub fn parse_lsof_listen_line(line: &str) -> Option<(u32, u16)> {
@@ -22,7 +32,7 @@ pub fn parse_lsof_listen_line(line: &str) -> Option<(u32, u16)> {
     Some((pid, port))
 }
 
-pub fn listening_ports() -> Result<Vec<(u16, u32)>> {
+fn listening_ports_lsof() -> Result<Vec<(u16, u32)>> {
     let output = Command::new("lsof")
         .args(["-nP", "-iTCP", "-sTCP:LISTEN"])
         .output()
@@ -43,7 +53,7 @@ pub fn listening_ports() -> Result<Vec<(u16, u32)>> {
     Ok(pairs)
 }
 
-pub fn pids_for_port(port: u16) -> Result<Vec<u32>> {
+fn pids_for_port_lsof(port: u16) -> Result<Vec<u32>> {
     let output = Command::new("lsof")
         .args(["-nP", &format!("-iTCP:{}", port), "-sTCP:LISTEN", "-t"])
         .output()
@@ -56,6 +66,38 @@ pub fn pids_for_port(port: u16) -> Result<Vec<u32>> {
         }
     }
     Ok(pids)
+}
+
+pub fn listening_ports() -> Result<Vec<(u16, u32)>> {
+    match ports_native::try_listening_ports() {
+        Some(result) => match result {
+            Ok(pairs) => Ok(pairs),
+            Err(_) => {
+                hint_lsof_fallback();
+                listening_ports_lsof()
+            }
+        },
+        None => {
+            hint_lsof_fallback();
+            listening_ports_lsof()
+        }
+    }
+}
+
+pub fn pids_for_port(port: u16) -> Result<Vec<u32>> {
+    match ports_native::try_pids_for_port(port) {
+        Some(result) => match result {
+            Ok(pids) => Ok(pids),
+            Err(_) => {
+                hint_lsof_fallback();
+                pids_for_port_lsof(port)
+            }
+        },
+        None => {
+            hint_lsof_fallback();
+            pids_for_port_lsof(port)
+        }
+    }
 }
 
 pub fn merge_ports(procs: &mut [ProcessInfo], port_map: &[(u16, u32)]) {
