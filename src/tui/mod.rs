@@ -1,5 +1,7 @@
 mod app;
-mod ui;
+pub mod ui;
+
+pub use app::App;
 
 use std::io::{self, stdout};
 use std::sync::mpsc;
@@ -19,8 +21,6 @@ use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::listening_ports;
 use crate::process::tree::collect_tree_pids;
-
-use self::app::App;
 
 enum Msg {
     Ports(Vec<(u16, u32)>),
@@ -96,9 +96,11 @@ fn handle_key(
     tx: &mpsc::Sender<Msg>,
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
 ) -> anyhow::Result<bool> {
-    let code = key.code;
+    if key.kind != KeyEventKind::Press {
+        return Ok(false);
+    }
     if app.is_confirming_kill() {
-        match code {
+        match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => {
                 if let Some(pending) = app.take_pending_kill() {
                     kill_selection(app, pending.force, pending.tree)?;
@@ -111,6 +113,45 @@ fn handle_key(
         }
         return Ok(false);
     }
+    if is_kill_preview_key(key) {
+        let (force, tree) = kill_preview_flags(key);
+        request_kill_preview(app, terminal, force, tree)?;
+        return Ok(false);
+    }
+    if key.code == KeyCode::Char('r') {
+        app.refresh();
+        app.status = "Refreshing processes + ports…".into();
+        spawn_port_loader(tx.clone());
+        return Ok(false);
+    }
+    Ok(handle_key_event(app, key))
+}
+
+fn is_kill_preview_key(key: KeyEvent) -> bool {
+    if key.kind != KeyEventKind::Press {
+        return false;
+    }
+    matches!(
+        key.code,
+        KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('t') | KeyCode::Char('T')
+    )
+}
+
+fn kill_preview_flags(key: KeyEvent) -> (bool, bool) {
+    match key.code {
+        KeyCode::Char('K') => (true, false),
+        KeyCode::Char('t') => (false, true),
+        KeyCode::Char('T') => (true, true),
+        _ => (false, false),
+    }
+}
+
+/// Handle a key press without drawing. Returns `true` when the TUI should exit.
+pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
+    if key.kind != KeyEventKind::Press {
+        return false;
+    }
+    let code = key.code;
 
     if app.searching {
         match code {
@@ -130,18 +171,18 @@ fn handle_key(
             }
             _ => {}
         }
-        return Ok(false);
+        return false;
     }
 
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match code {
             KeyCode::Char('u') | KeyCode::Char('U') => {
                 app.move_page_up(app.viewport_rows);
-                return Ok(false);
+                return false;
             }
             KeyCode::Char('d') | KeyCode::Char('D') => {
                 app.move_page_down(app.viewport_rows);
-                return Ok(false);
+                return false;
             }
             _ => {}
         }
@@ -150,7 +191,7 @@ fn handle_key(
     match code {
         KeyCode::Char('q') => {
             app.should_quit = true;
-            return Ok(true);
+            return true;
         }
         KeyCode::Esc => {
             if app.show_detail {
@@ -159,7 +200,7 @@ fn handle_key(
                 app.collapse_project();
             } else {
                 app.should_quit = true;
-                return Ok(true);
+                return true;
             }
         }
         KeyCode::Enter => {
@@ -180,21 +221,16 @@ fn handle_key(
         KeyCode::Char('g') => app.move_first(),
         KeyCode::Char('G') => app.move_last(),
         KeyCode::Char(' ') => app.toggle_select_current(),
-        KeyCode::Char('k') => request_kill_preview(app, terminal, false, false)?,
-        KeyCode::Char('K') => request_kill_preview(app, terminal, true, false)?,
-        KeyCode::Char('t') => request_kill_preview(app, terminal, false, true)?,
-        KeyCode::Char('T') => request_kill_preview(app, terminal, true, true)?,
+        KeyCode::Char('k') | KeyCode::Char('K') | KeyCode::Char('t') | KeyCode::Char('T') => {
+            let (force, tree) = kill_preview_flags(key);
+            app.request_kill_confirm(force, tree);
+        }
         KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('e') => app.toggle_tree_view(),
         KeyCode::Char('P') => app.toggle_project_view(),
-        KeyCode::Char('r') => {
-            app.refresh();
-            app.status = "Refreshing processes + ports…".into();
-            spawn_port_loader(tx.clone());
-        }
         _ => {}
     }
-    Ok(false)
+    false
 }
 
 fn request_kill_preview(
