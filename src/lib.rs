@@ -3,6 +3,7 @@ pub mod cli;
 pub mod commands;
 pub mod error;
 pub mod history;
+pub mod json_output;
 pub mod process;
 pub mod project;
 pub mod report;

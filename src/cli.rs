@@ -32,6 +32,10 @@ pub struct CliArgs {
     #[arg(long = "dry-run", global = true)]
     pub dry_run: bool,
 
+    /// Emit machine-readable JSON (disables colors)
+    #[arg(long, global = true)]
+    pub json: bool,
+
     #[command(subcommand)]
     subcommand: Option<RawSub>,
 
@@ -45,6 +49,7 @@ pub struct Cli {
     pub force: bool,
     pub tree: bool,
     pub dry_run: bool,
+    pub json: bool,
     pub target: Target,
 }
 
@@ -87,12 +92,14 @@ impl Cli {
         let mut force = args.force;
         let mut tree = args.tree;
         let mut dry_run = args.dry_run;
+        let mut json = args.json;
         let mut raw_targets = Vec::new();
         for t in args.raw_targets {
             match t.as_str() {
                 "--force" => force = true,
                 "--tree" => tree = true,
                 "--dry-run" => dry_run = true,
+                "--json" => json = true,
                 _ => raw_targets.push(t),
             }
         }
@@ -101,6 +108,7 @@ impl Cli {
             force,
             tree,
             dry_run,
+            json,
             target,
         }
     }
