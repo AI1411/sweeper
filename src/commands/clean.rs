@@ -3,8 +3,16 @@ use crate::clean::{
     format_reasons_display, propose_leftovers, summarize, CleanSummary,
 };
 use crate::commands::confirm::confirm;
+use crate::disk::collect_docker_disk_report;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
-use crate::json_output::{emit_json, CleanCandidateJson, CleanJson, CleanSummaryJson};
+use crate::json_output::{
+    emit_json, CleanCandidateJson, CleanJson, CleanOrbstackReclaimJson, CleanSummaryJson,
+    ReclaimEstimateJson, ReclaimResultJson,
+};
+use crate::memory::{
+    collect_memory_report, estimate_reclaim, execute_reclaim, format_bytes, format_estimate,
+    format_reclaim_result, LiveReclaimBackend, ReclaimEstimate, ReclaimResult,
+};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
@@ -21,34 +29,21 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
     proposals = apply_excludes(proposals, &excludes);
 
     let summary = summarize(&proposals);
+    let (reclaim_estimate, disk_reclaimable) = orbstack_context();
 
     if json {
-        let payload = CleanJson {
-            candidates: proposals
-                .iter()
-                .map(|c| CleanCandidateJson {
-                    pid: c.process.pid,
-                    name: c.process.name.clone(),
-                    ports: c.process.ports.clone(),
-                    memory_bytes: c.process.memory_bytes,
-                    reasons: format_reasons_display(c),
-                    confidence: confidence_level(c).into(),
-                })
-                .collect(),
-            summary: CleanSummaryJson {
-                stale_servers: summary.stale_servers,
-                orphans: summary.orphans,
-                zombies: summary.zombies,
-                idle_listeners: summary.idle_listeners,
-                listening: summary.listening,
-                estimated_bytes: summary.estimated_bytes,
-            },
-        };
+        let payload = build_clean_json(
+            &proposals,
+            &summary,
+            &reclaim_estimate,
+            disk_reclaimable,
+            None,
+        );
         return emit_json(&payload);
     }
 
     println!("{}\n", style::header("Sweeper found possible leftovers:"));
-    print_summary_lines(&summary, proposals.len());
+    print_summary_lines(&summary, proposals.len(), reclaim_estimate.as_ref());
 
     for c in &proposals {
         let p = &c.process;
@@ -124,18 +119,176 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
         ));
     }
     crate::report::print_kill_summary(&outcomes);
+
+    let reclaim_result = try_post_clean_reclaim(reclaim_estimate.as_ref())?;
+    if reclaim_result.is_some() || outcomes.iter().any(|o| o.is_success()) {
+        print_recovered_summary(&outcomes, reclaim_result.as_ref(), disk_reclaimable);
+    }
     Ok(())
 }
 
-fn print_summary_lines(summary: &CleanSummary, total: usize) {
-    print!("{}", format_summary_lines(summary, total));
+fn orbstack_context() -> (Option<ReclaimEstimate>, Option<u64>) {
+    let memory_report = collect_memory_report().ok();
+    let estimate = memory_report.as_ref().and_then(estimate_reclaim);
+    let disk_reclaimable = collect_docker_disk_report()
+        .ok()
+        .map(|report| report.reclaimable_bytes);
+    (estimate, disk_reclaimable)
 }
 
-pub fn format_summary_lines(summary: &CleanSummary, total: usize) -> String {
+fn try_post_clean_reclaim(
+    estimate: Option<&ReclaimEstimate>,
+) -> anyhow::Result<Option<ReclaimResult>> {
+    let Some(est) = estimate else {
+        return Ok(None);
+    };
+    if est.reclaimable_bytes == 0 {
+        return Ok(None);
+    }
+    println!();
+    println!(
+        "{} {}",
+        style::dim("OrbStack reclaim available:"),
+        style::mem(format_estimate(est.reclaimable_bytes))
+    );
+    if !confirm(&format!(
+        "Reclaim approximately {} of OrbStack VM memory?",
+        format_estimate(est.reclaimable_bytes)
+    ))? {
+        println!("{}", style::dim("Skipped OrbStack memory reclaim."));
+        return Ok(None);
+    }
+    let backend = LiveReclaimBackend;
+    let (_, result) = execute_reclaim(&backend, false)?;
+    if let Some(result) = &result {
+        print!("{}", format_reclaim_result(result));
+    }
+    Ok(result)
+}
+
+fn build_clean_json(
+    proposals: &[crate::clean::CleanCandidate],
+    summary: &CleanSummary,
+    reclaim_estimate: &Option<ReclaimEstimate>,
+    disk_reclaimable: Option<u64>,
+    reclaim_result: Option<&ReclaimResult>,
+) -> CleanJson {
+    CleanJson {
+        candidates: proposals
+            .iter()
+            .map(|c| CleanCandidateJson {
+                pid: c.process.pid,
+                name: c.process.name.clone(),
+                ports: c.process.ports.clone(),
+                memory_bytes: c.process.memory_bytes,
+                reasons: format_reasons_display(c),
+                confidence: confidence_level(c).into(),
+            })
+            .collect(),
+        summary: CleanSummaryJson {
+            stale_servers: summary.stale_servers,
+            orphans: summary.orphans,
+            zombies: summary.zombies,
+            idle_listeners: summary.idle_listeners,
+            listening: summary.listening,
+            estimated_bytes: summary.estimated_bytes,
+        },
+        orbstack_reclaim: reclaim_estimate.as_ref().map(|e| CleanOrbstackReclaimJson {
+            estimate: Some(ReclaimEstimateJson::from(e)),
+            executed: reclaim_result.is_some(),
+            result: reclaim_result.cloned().map(ReclaimResultJson::from),
+        }),
+        disk_reclaimable_bytes: disk_reclaimable,
+    }
+}
+
+fn print_recovered_summary(
+    outcomes: &[crate::report::KillResult],
+    reclaim: Option<&ReclaimResult>,
+    disk_reclaimable: Option<u64>,
+) {
+    print!(
+        "{}",
+        format_recovered_summary(outcomes, reclaim, disk_reclaimable)
+    );
+}
+
+pub fn format_recovered_summary(
+    outcomes: &[crate::report::KillResult],
+    reclaim: Option<&ReclaimResult>,
+    disk_reclaimable: Option<u64>,
+) -> String {
+    use std::fmt::Write;
+    let killed = outcomes.iter().filter(|o| o.is_success()).count();
+    let process_memory = crate::report::freed_bytes_from_results(outcomes);
+    let orbstack_memory = reclaim.map(|r| r.recovered_bytes).unwrap_or(0);
+    if killed == 0 && orbstack_memory == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    writeln!(out).unwrap();
+    writeln!(out, "{}", style::header("Recovered")).unwrap();
+    if process_memory > 0 {
+        writeln!(
+            out,
+            "{:<14} {}",
+            "Processes",
+            style::mem(format_bytes(process_memory))
+        )
+        .unwrap();
+    }
+    if orbstack_memory > 0 {
+        writeln!(
+            out,
+            "{:<14} {}",
+            "Memory",
+            style::mem(format_estimate(orbstack_memory))
+        )
+        .unwrap();
+    }
+    if let Some(disk) = disk_reclaimable {
+        if disk > 0 {
+            writeln!(
+                out,
+                "{:<14} {} {}",
+                "Disk",
+                style::mem(format_estimate(disk)),
+                style::dim("(informational — run sw disk for prune options)")
+            )
+            .unwrap();
+        }
+    }
+    out
+}
+
+fn print_summary_lines(
+    summary: &CleanSummary,
+    total: usize,
+    reclaim_estimate: Option<&ReclaimEstimate>,
+) {
+    print!("{}", format_summary_lines(summary, total, reclaim_estimate));
+}
+
+pub fn format_summary_lines(
+    summary: &CleanSummary,
+    total: usize,
+    reclaim_estimate: Option<&ReclaimEstimate>,
+) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     if total == 0 {
         writeln!(out, "{} No leftover candidates right now.", style::dim("·")).unwrap();
+        if let Some(est) = reclaim_estimate {
+            if est.reclaimable_bytes > 0 {
+                writeln!(
+                    out,
+                    "{} {}",
+                    style::dim("OrbStack reclaim available:"),
+                    style::mem(format_estimate(est.reclaimable_bytes))
+                )
+                .unwrap();
+            }
+        }
         return out;
     }
     writeln!(
@@ -206,6 +359,60 @@ pub fn format_summary_lines(summary: &CleanSummary, total: usize) -> String {
         )
         .unwrap();
     }
+    if let Some(est) = reclaim_estimate {
+        if est.reclaimable_bytes > 0 {
+            writeln!(
+                out,
+                "{} {}",
+                style::dim("OrbStack reclaim available:"),
+                style::mem(format_estimate(est.reclaimable_bytes))
+            )
+            .unwrap();
+        }
+    }
     writeln!(out).unwrap();
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::clean::CleanSummary;
+    use crate::memory::ReclaimEstimate;
+
+    fn sample_estimate() -> ReclaimEstimate {
+        ReclaimEstimate {
+            vm_bytes: 18_400_000_000,
+            container_total_bytes: 2_500_000_000,
+            reclaimable_bytes: 14_200_000_000,
+            page_cache_bytes: 9_000_000_000,
+            filesystem_cache_bytes: 3_000_000_000,
+            other_bytes: 2_200_000_000,
+        }
+    }
+
+    #[test]
+    fn summary_includes_orbstack_reclaim_hint() {
+        let text = format_summary_lines(&CleanSummary::default(), 2, Some(&sample_estimate()));
+        assert!(text.contains("OrbStack reclaim available"));
+    }
+
+    #[test]
+    fn recovered_summary_includes_memory_and_disk() {
+        let outcomes = vec![crate::report::KillResult::new(
+            100_000_000,
+            vec![3000],
+            KillOutcome::Terminated,
+        )];
+        let reclaim = ReclaimResult {
+            before_vm_bytes: 18_000_000_000,
+            after_vm_bytes: 4_000_000_000,
+            recovered_bytes: 14_000_000_000,
+            success: true,
+        };
+        let text = format_recovered_summary(&outcomes, Some(&reclaim), Some(8_700_000_000));
+        assert!(text.contains("Recovered"));
+        assert!(text.contains("Memory"));
+        assert!(text.contains("Disk"));
+    }
 }

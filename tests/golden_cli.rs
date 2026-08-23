@@ -58,7 +58,7 @@ fn golden_clean_summary_lines() {
         listening: 3,
         estimated_bytes: 256 * 1024 * 1024,
     };
-    let out = format_summary_lines(&summary, 4);
+    let out = format_summary_lines(&summary, 4, None);
     golden_compare("clean_summary", &out);
 }
 
