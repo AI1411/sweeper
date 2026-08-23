@@ -1,6 +1,7 @@
 use sweeper::cli::{Cli, SubCommand, Target};
-use sweeper::commands::{clean, history, name, port, ports_list, project, top};
+use sweeper::commands::{clean, history, memory, name, port, ports_list, project, top};
 use sweeper::json_output;
+use sweeper::memory::MemorySort;
 use sweeper::tui;
 
 fn main() -> anyhow::Result<()> {
@@ -23,6 +24,15 @@ fn main() -> anyhow::Result<()> {
         Target::Sub(SubCommand::History { last }) => history::run_history(last, json)?,
         Target::Sub(SubCommand::Project { name }) => {
             project::run_project(name, force, dry_run, json)?
+        }
+        Target::Sub(SubCommand::Memory { sort }) => {
+            let sort_field = match sort.as_deref() {
+                None => MemorySort::default(),
+                Some(s) => MemorySort::parse(s).ok_or_else(|| {
+                    anyhow::anyhow!("invalid --sort value: {s} (use memory, name, or status)")
+                })?,
+            };
+            memory::run_memory(sort_field, json)?
         }
         Target::Tui => tui::run()?,
     }

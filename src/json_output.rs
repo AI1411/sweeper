@@ -60,3 +60,54 @@ pub struct HistoryJson {
     pub signal: String,
     pub result: String,
 }
+
+#[derive(Debug, Serialize)]
+pub struct SystemMemoryJson {
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub available_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ContainerMemoryJson {
+    pub name: String,
+    pub memory_bytes: u64,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemoryJson {
+    pub system: SystemMemoryJson,
+    pub orbstack_vm_bytes: Option<u64>,
+    pub containers: Vec<ContainerMemoryJson>,
+    pub container_total_bytes: u64,
+    pub unattributed_bytes: Option<u64>,
+    pub show_unattributed_warning: bool,
+    pub possible_causes: Vec<&'static str>,
+}
+
+impl From<&crate::memory::MemoryReport> for MemoryJson {
+    fn from(report: &crate::memory::MemoryReport) -> Self {
+        Self {
+            system: SystemMemoryJson {
+                total_bytes: report.system.total_bytes,
+                used_bytes: report.system.used_bytes,
+                available_bytes: report.system.available_bytes,
+            },
+            orbstack_vm_bytes: report.orbstack_vm_bytes,
+            containers: report
+                .containers
+                .iter()
+                .map(|c| ContainerMemoryJson {
+                    name: c.name.clone(),
+                    memory_bytes: c.memory_bytes,
+                    status: c.status.clone(),
+                })
+                .collect(),
+            container_total_bytes: report.container_total_bytes,
+            unattributed_bytes: report.unattributed_bytes,
+            show_unattributed_warning: report.show_unattributed_warning,
+            possible_causes: crate::memory::POSSIBLE_CAUSES.to_vec(),
+        }
+    }
+}
