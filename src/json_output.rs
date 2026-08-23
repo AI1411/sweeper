@@ -37,9 +37,18 @@ pub struct CleanSummaryJson {
 }
 
 #[derive(Debug, Serialize)]
+pub struct CleanOrbstackReclaimJson {
+    pub estimate: Option<ReclaimEstimateJson>,
+    pub executed: bool,
+    pub result: Option<ReclaimResultJson>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct CleanJson {
     pub candidates: Vec<CleanCandidateJson>,
     pub summary: CleanSummaryJson,
+    pub orbstack_reclaim: Option<CleanOrbstackReclaimJson>,
+    pub disk_reclaimable_bytes: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
