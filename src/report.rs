@@ -60,34 +60,58 @@ pub fn print_summary(count: usize, bytes: u64) {
 }
 
 pub fn print_kill_summary(results: &[KillResult]) {
+    let formatted = format_kill_summary(results);
+    if !formatted.is_empty() {
+        print!("{formatted}");
+    }
+}
+
+pub fn format_kill_summary(results: &[KillResult]) -> String {
     let count = results.iter().filter(|r| r.is_success()).count();
+    if count == 0 {
+        return String::new();
+    }
     let bytes = freed_bytes_from_results(results);
     let ports = released_ports(results);
-    print_kill_summary_from_parts(count, bytes, &ports);
+    format_kill_summary_from_parts(count, bytes, &ports)
 }
 
 fn print_kill_summary_from_parts(count: usize, bytes: u64, ports: &[u16]) {
-    if count == 0 {
-        return;
+    let formatted = format_kill_summary_from_parts(count, bytes, ports);
+    if !formatted.is_empty() {
+        print!("{formatted}");
     }
-    println!(
+}
+
+fn format_kill_summary_from_parts(count: usize, bytes: u64, ports: &[u16]) -> String {
+    if count == 0 {
+        return String::new();
+    }
+    let mut out = String::new();
+    use std::fmt::Write;
+    writeln!(
+        out,
         "\n{} {}",
         style::success(format!("Terminated {count} process(es)")),
         style::dim("(from last snapshot)")
-    );
-    println!(
+    )
+    .unwrap();
+    writeln!(
+        out,
         "{} {}",
         style::dim("Estimated memory freed:"),
         style::mem(format!("{:.0} MB", bytes as f64 / (1024.0 * 1024.0)))
-    );
+    )
+    .unwrap();
     if ports.is_empty() {
-        return;
+        return out;
     }
-    println!();
-    println!("{}", style::header("Ports released:"));
+    writeln!(out).unwrap();
+    writeln!(out, "{}", style::header("Ports released:")).unwrap();
     for port in ports {
-        println!("  {}", style::port(format!(":{port}")));
+        writeln!(out, "  {}", style::port(format!(":{port}"))).unwrap();
     }
+    out
 }
 
 #[cfg(test)]

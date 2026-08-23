@@ -9,7 +9,6 @@ use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
-use crate::style as sty;
 
 pub fn run_clean(force: bool, exclude: &[String], dry_run: bool) -> anyhow::Result<()> {
     let mut procs = list_processes();
@@ -102,63 +101,84 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool) -> anyhow::Resu
 }
 
 fn print_summary_lines(summary: &CleanSummary, total: usize) {
+    print!("{}", format_summary_lines(summary, total));
+}
+
+pub fn format_summary_lines(summary: &CleanSummary, total: usize) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
     if total == 0 {
-        println!("{} No leftover candidates right now.", style::dim("·"));
-        return;
+        writeln!(out, "{} No leftover candidates right now.", style::dim("·")).unwrap();
+        return out;
     }
-    println!(
+    writeln!(
+        out,
         "{} {} candidate process{}",
         style::success("✓"),
         style::process_name(total),
         if total == 1 { "" } else { "es" }
-    );
+    )
+    .unwrap();
     if summary.stale_servers > 0 {
-        println!(
+        writeln!(
+            out,
             "{} {} stale dev server{}",
             style::success("✓"),
             summary.stale_servers,
             if summary.stale_servers == 1 { "" } else { "s" }
-        );
+        )
+        .unwrap();
     }
     if summary.orphans > 0 {
-        println!(
+        writeln!(
+            out,
             "{} {} orphan process{}",
             style::success("✓"),
             summary.orphans,
             if summary.orphans == 1 { "" } else { "es" }
-        );
+        )
+        .unwrap();
     }
     if summary.zombies > 0 {
-        println!(
+        writeln!(
+            out,
             "{} {} zombie process{}",
             style::success("✓"),
             summary.zombies,
             if summary.zombies == 1 { "" } else { "es" }
-        );
+        )
+        .unwrap();
     }
     if summary.idle_listeners > 0 {
-        println!(
+        writeln!(
+            out,
             "{} {} idle listener{}",
             style::success("✓"),
             summary.idle_listeners,
             if summary.idle_listeners == 1 { "" } else { "s" }
-        );
+        )
+        .unwrap();
     }
     if summary.listening > 0 {
-        println!(
+        writeln!(
+            out,
             "{} {} listening on dev port{}",
             style::dim("·"),
             summary.listening,
             if summary.listening == 1 { "" } else { "s" }
-        );
+        )
+        .unwrap();
     }
     if summary.estimated_bytes > 0 {
         let mb = summary.estimated_bytes as f64 / (1024.0 * 1024.0);
-        println!(
+        writeln!(
+            out,
             "{} {}",
             style::dim("Estimated memory reclaim:"),
-            sty::mem(format!("{mb:.0} MB"))
-        );
+            style::mem(format!("{mb:.0} MB"))
+        )
+        .unwrap();
     }
-    println!();
+    writeln!(out).unwrap();
+    out
 }

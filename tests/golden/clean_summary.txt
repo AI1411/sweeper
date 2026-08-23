@@ -1,0 +1,7 @@
+✓ 4 candidate processes
+✓ 2 stale dev servers
+✓ 1 orphan process
+✓ 1 idle listener
+· 3 listening on dev ports
+Estimated memory reclaim: 256 MB
+
