@@ -1,0 +1,7 @@
+
+Terminated 2 process(es) (from last snapshot)
+Estimated memory freed: 125 MB
+
+Ports released:
+  :3000
+  :5173
