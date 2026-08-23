@@ -29,6 +29,7 @@ pub enum SubCommand {
         action: Option<MemoryAction>,
         sort: Option<String>,
         warn_above: Option<String>,
+        leaks: bool,
     },
 }
 
@@ -125,6 +126,9 @@ enum RawSub {
         /// Warn when container memory exceeds this threshold (e.g. 2gb, 2048mb)
         #[arg(long = "warn-above", value_name = "BYTES|GB", global = true)]
         warn_above: Option<String>,
+        /// Show possible container memory leak candidates from stored snapshots
+        #[arg(long, global = true)]
+        leaks: bool,
     },
 }
 
@@ -197,6 +201,7 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
                 action,
                 sort,
                 warn_above,
+                leaks,
             } => Target::Sub(SubCommand::Memory {
                 action: action.map(|a| match a {
                     RawMemoryAction::Reclaim => MemoryAction::Reclaim,
@@ -210,6 +215,7 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
                 }),
                 sort,
                 warn_above,
+                leaks,
             }),
         };
     }
