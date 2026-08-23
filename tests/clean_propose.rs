@@ -26,6 +26,21 @@ fn proc(
     }
 }
 
+fn zombie(pid: u32, ppid: u32, name: &str, run_time_secs: u64) -> ProcessInfo {
+    ProcessInfo {
+        pid,
+        ppid,
+        name: name.into(),
+        cpu: 0.0,
+        memory_bytes: 0,
+        ports: vec![],
+        command: None,
+        cwd: None,
+        run_time_secs,
+        is_zombie: true,
+    }
+}
+
 #[test]
 fn proposes_stale_dev_server_on_listen_port() {
     let procs = vec![proc(
@@ -277,6 +292,33 @@ fn still_proposes_stale_launchd_orphan() {
     let out = propose_leftovers(&procs, &listening);
     assert_eq!(out.len(), 1);
     assert!(out[0].reasons.iter().any(|r| r == "stale-server"));
+}
+
+#[test]
+fn proposes_orphan_when_parent_shell_is_zombie() {
+    let procs = vec![
+        zombie(50, 1, "bash", 3600),
+        proc(430, 50, "node", 0.0, 120, vec![3000], None),
+    ];
+    let listening = vec![(3000, 430)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "orphan-parent-defunct"));
+}
+
+#[test]
+fn proposes_nested_worker_under_orphan_node() {
+    let procs = vec![
+        proc(500, 9999, "node", 0.0, 60, vec![3000], None),
+        proc(501, 500, "vite", 0.0, 60, vec![], None),
+    ];
+    let listening = vec![(3000, 500)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 2);
+    assert!(out.iter().any(|c| c.process.pid == 500));
+    assert!(out.iter().any(|c| c.process.pid == 501));
+    let worker = out.iter().find(|c| c.process.pid == 501).unwrap();
+    assert!(worker.reasons.iter().any(|r| r == "orphan-parent"));
 }
 
 #[test]
