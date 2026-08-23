@@ -549,8 +549,9 @@ impl App {
     }
 
     pub fn refresh(&mut self) {
-        self.processes = crate::process::list::list_processes();
-        self.selected.clear();
+        crate::process::list::refresh_process_list(&mut self.processes);
+        self.selected
+            .retain(|pid| self.processes.iter().any(|p| p.pid == *pid));
         if !self.last_ports.is_empty() {
             crate::process::ports::merge_ports(&mut self.processes, &self.last_ports);
         }
