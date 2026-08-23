@@ -12,10 +12,7 @@ pub struct CacheEntry {
 }
 
 pub fn collect_caches() -> Vec<CacheEntry> {
-    let mut entries: Vec<CacheEntry> = cache_providers()
-        .into_iter()
-        .flatten()
-        .collect();
+    let mut entries: Vec<CacheEntry> = cache_providers().into_iter().flatten().collect();
     entries.sort_by_key(|e| std::cmp::Reverse(e.size_bytes));
     entries
 }
@@ -94,7 +91,12 @@ pub fn format_cache_report(entries: &[CacheEntry]) -> String {
     use std::fmt::Write;
     let mut out = String::new();
     writeln!(out, "{}", crate::style::header("Dev Caches")).unwrap();
-    writeln!(out, "{}", crate::style::dim("────────────────────────────────")).unwrap();
+    writeln!(
+        out,
+        "{}",
+        crate::style::dim("────────────────────────────────")
+    )
+    .unwrap();
     if entries.is_empty() {
         writeln!(out, "{}", crate::style::dim("No known dev caches found.")).unwrap();
         return out;
