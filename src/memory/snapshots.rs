@@ -157,7 +157,12 @@ pub fn detect_leaks(
     window_secs: i64,
     growth_threshold_bytes: u64,
 ) -> Vec<LeakCandidate> {
-    detect_leaks_at(snapshots, window_secs, growth_threshold_bytes, reference_time(snapshots))
+    detect_leaks_at(
+        snapshots,
+        window_secs,
+        growth_threshold_bytes,
+        reference_time(snapshots),
+    )
 }
 
 pub fn detect_leaks_at(
@@ -309,10 +314,7 @@ mod tests {
 
     #[test]
     fn ignores_small_growth() {
-        let snapshots = vec![
-            snap(0, "api", 820_000_000),
-            snap(1800, "api", 900_000_000),
-        ];
+        let snapshots = vec![snap(0, "api", 820_000_000), snap(1800, "api", 900_000_000)];
         let leaks = detect_leaks(&snapshots, 1800, 1_000_000_000);
         assert!(leaks.is_empty());
     }

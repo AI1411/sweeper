@@ -2,10 +2,10 @@ use crate::commands::confirm::confirm;
 use crate::json_output::{emit_json, MemoryJson, ReclaimJson, ReclaimResultJson};
 use crate::memory::{
     collect_memory_report, collect_memory_report_from, docker_available, estimate_reclaim,
-    execute_reclaim, format_bytes, format_estimate, format_leak_candidates, format_reclaim_analysis,
-    format_reclaim_result, high_memory_warnings, load_leak_candidates, parse_warn_threshold,
-    record_snapshot, run_memory_watch, sort_containers, warn_threshold_bytes, LiveReclaimBackend,
-    MemoryReport, MemorySort, MemoryWarning, POSSIBLE_CAUSES,
+    execute_reclaim, format_bytes, format_estimate, format_leak_candidates,
+    format_reclaim_analysis, format_reclaim_result, high_memory_warnings, load_leak_candidates,
+    parse_warn_threshold, record_snapshot, run_memory_watch, sort_containers, warn_threshold_bytes,
+    LiveReclaimBackend, MemoryReport, MemorySort, MemoryWarning, POSSIBLE_CAUSES,
 };
 use crate::style;
 
@@ -51,9 +51,12 @@ fn run_memory_show(
     };
     let warnings = high_memory_warnings(&report.containers, threshold);
     if json {
-        return emit_json(
-            &MemoryJson::from_report(&report, &warnings, threshold, &leak_candidates),
-        );
+        return emit_json(&MemoryJson::from_report(
+            &report,
+            &warnings,
+            threshold,
+            &leak_candidates,
+        ));
     }
     print_report(&report, &warnings, threshold);
     if !leak_candidates.is_empty() {
