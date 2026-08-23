@@ -91,3 +91,34 @@ Suggested order (phases):
 6. **Performance / polish:** 40, 41, 42
 7. **Clean intelligence:** 23, 43, 44, 45
 8. **Nice-to-have UX:** 29
+
+## OrbStack / Developer Resource Manager (2026-08)
+
+OrbStack memory & Docker resource management. Create with:
+
+```bash
+for f in docs/superpowers/issues/{46..55}-*.md; do
+  # see scripts/create-github-issues.sh or create manually via gh
+done
+```
+
+| # | File | GitHub | Title | Priority |
+|---|---|---|---|---|
+| 46 | `46-sw-memory.md` | #107 | `sw memory` — OrbStack/Docker memory analysis | high |
+| 47 | `47-sw-memory-reclaim.md` | #108 | `sw memory reclaim` — safe reclaim | high |
+| 48 | `48-sw-memory-warnings.md` | #109 | High memory usage warnings | medium |
+| 49 | `49-sw-docker.md` | #110 | `sw docker` — resource overview | medium |
+| 50 | `50-sw-disk.md` | #111 | `sw disk` — Docker/dev storage | medium |
+| 51 | `51-tui-orbstack.md` | #112 | TUI OrbStack/Docker dashboard | medium |
+| 52 | `52-sw-memory-watch.md` | #113 | `sw memory watch` | low |
+| 53 | `53-memory-leak-detection.md` | #114 | Container memory leak detection | low |
+| 54 | `54-sw-clean-orbstack.md` | #115 | Integrate reclaim into `sw clean` | low |
+| 55 | `55-sw-cache.md` | #116 | `sw cache` — dev tool caches | low |
+
+Suggested order:
+
+1. **Foundation:** 46 → 47, 50
+2. **Overview:** 49 (needs 46 + 50)
+3. **UX:** 48, 51
+4. **Monitoring:** 52 → 53
+5. **Integration:** 54, 55
