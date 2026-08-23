@@ -136,7 +136,9 @@ fn orbstack_context() -> (Option<ReclaimEstimate>, Option<u64>) {
     (estimate, disk_reclaimable)
 }
 
-fn try_post_clean_reclaim(estimate: Option<&ReclaimEstimate>) -> anyhow::Result<Option<ReclaimResult>> {
+fn try_post_clean_reclaim(
+    estimate: Option<&ReclaimEstimate>,
+) -> anyhow::Result<Option<ReclaimResult>> {
     let Some(est) = estimate else {
         return Ok(None);
     };
@@ -205,7 +207,10 @@ fn print_recovered_summary(
     reclaim: Option<&ReclaimResult>,
     disk_reclaimable: Option<u64>,
 ) {
-    print!("{}", format_recovered_summary(outcomes, reclaim, disk_reclaimable));
+    print!(
+        "{}",
+        format_recovered_summary(outcomes, reclaim, disk_reclaimable)
+    );
 }
 
 pub fn format_recovered_summary(
@@ -256,7 +261,11 @@ pub fn format_recovered_summary(
     out
 }
 
-fn print_summary_lines(summary: &CleanSummary, total: usize, reclaim_estimate: Option<&ReclaimEstimate>) {
+fn print_summary_lines(
+    summary: &CleanSummary,
+    total: usize,
+    reclaim_estimate: Option<&ReclaimEstimate>,
+) {
     print!("{}", format_summary_lines(summary, total, reclaim_estimate));
 }
 
