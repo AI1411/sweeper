@@ -35,6 +35,7 @@ fn ignores_header_like_line() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn parses_proc_net_tcp_listen_line() {
     use sweeper::process::ports_native::parse_proc_net_tcp_line;
     let line = "  0: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000    1000        0 12345 1 00000000 100 0 0 10 0";
