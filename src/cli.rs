@@ -35,6 +35,7 @@ pub enum SubCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MemoryAction {
     Reclaim,
+    Watch { interval: u64, containers: bool },
 }
 
 #[derive(Debug, Parser)]
@@ -131,6 +132,15 @@ enum RawSub {
 enum RawMemoryAction {
     /// Reclaim reclaimable OrbStack VM memory (requires confirmation)
     Reclaim,
+    /// Stream OrbStack VM memory usage
+    Watch {
+        /// Refresh interval in seconds
+        #[arg(long, default_value_t = 5)]
+        interval: u64,
+        /// Include per-container lines each tick
+        #[arg(long)]
+        containers: bool,
+    },
 }
 
 impl Cli {
@@ -190,6 +200,13 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             } => Target::Sub(SubCommand::Memory {
                 action: action.map(|a| match a {
                     RawMemoryAction::Reclaim => MemoryAction::Reclaim,
+                    RawMemoryAction::Watch {
+                        interval,
+                        containers,
+                    } => MemoryAction::Watch {
+                        interval,
+                        containers,
+                    },
                 }),
                 sort,
                 warn_above,

@@ -4,6 +4,9 @@ mod orbstack;
 mod reclaim;
 mod system;
 mod warnings;
+mod watch;
+
+pub use watch::{collect_watch_sample, compute_delta, run_memory_watch, WatchDelta, WatchSample};
 
 pub use warnings::{
     high_memory_warnings, parse_warn_threshold, warn_threshold_bytes, MemoryWarning,
