@@ -162,6 +162,7 @@ pub fn propose_leftovers(procs: &[ProcessInfo], listening: &[(u16, u32)]) -> Vec
             let reasons = collect_reasons(
                 p,
                 parent,
+                &by_pid,
                 &listen_pids,
                 &pid_set,
                 &ports_by_pid,
@@ -205,7 +206,7 @@ pub fn summarize(candidates: &[CleanCandidate]) -> CleanSummary {
         }
         if c.reasons
             .iter()
-            .any(|r| r == "orphan-ppid" || r == "orphan-parent")
+            .any(|r| r == "orphan-ppid" || r == "orphan-parent" || r == "orphan-parent-defunct")
         {
             summary.orphans += 1;
         }
@@ -228,6 +229,7 @@ pub fn score_candidate(c: &CleanCandidate) -> u32 {
         score += match reason.as_str() {
             "zombie" => 100,
             "orphan-parent" => 80,
+            "orphan-parent-defunct" => 80,
             "orphan-ppid" => 70,
             "stale-server" => 60,
             "idle-listener" => 50,
@@ -292,7 +294,7 @@ pub fn is_likely_active_session(p: &ProcessInfo, parent: Option<&ProcessInfo>) -
         return true;
     }
     if let Some(parent) = parent {
-        if is_interactive_shell(&parent.name) {
+        if !parent.is_zombie && is_interactive_shell(&parent.name) {
             return true;
         }
     }
@@ -307,9 +309,31 @@ fn is_interactive_shell(name: &str) -> bool {
     )
 }
 
+/// Walk the parent chain; flag when an ancestor is missing from the snapshot or is zombie.
+fn detect_orphan_chain(
+    p: &ProcessInfo,
+    by_pid: &HashMap<u32, &ProcessInfo>,
+    pid_set: &HashSet<u32>,
+) -> Option<&'static str> {
+    let mut current_ppid = p.ppid;
+    let mut seen = HashSet::new();
+    while current_ppid != 0 && seen.insert(current_ppid) {
+        if !pid_set.contains(&current_ppid) {
+            return Some("orphan-parent");
+        }
+        let parent = by_pid.get(&current_ppid)?;
+        if parent.is_zombie {
+            return Some("orphan-parent-defunct");
+        }
+        current_ppid = parent.ppid;
+    }
+    None
+}
+
 fn collect_reasons(
     p: &ProcessInfo,
     parent: Option<&ProcessInfo>,
+    by_pid: &HashMap<u32, &ProcessInfo>,
     listen_pids: &HashSet<u32>,
     pid_set: &HashSet<u32>,
     ports_by_pid: &HashMap<u32, Vec<u16>>,
@@ -319,7 +343,11 @@ fn collect_reasons(
     let listening = listen_pids.contains(&p.pid);
     let active_session = is_likely_active_session(p, parent);
     let orphan_ppid = !active_session && (p.ppid == 0 || p.ppid == 1);
-    let orphan_parent = !active_session && p.ppid != 0 && !pid_set.contains(&p.ppid);
+    let chain_orphan = if !active_session && !orphan_ppid {
+        detect_orphan_chain(p, by_pid, pid_set)
+    } else {
+        None
+    };
     let stale = !active_session && listening && p.run_time_secs >= STALE_SERVER_SECS;
     let idle_listener = !active_session
         && listening
@@ -338,8 +366,8 @@ fn collect_reasons(
     if orphan_ppid {
         reasons.push("orphan-ppid".into());
     }
-    if orphan_parent {
-        reasons.push("orphan-parent".into());
+    if let Some(tag) = chain_orphan {
+        reasons.push(tag.into());
     }
     if stale {
         reasons.push("stale-server".into());
@@ -360,10 +388,12 @@ fn is_candidate(reasons: &[String]) -> bool {
     if reasons.iter().any(|r| r == "zombie") {
         return true;
     }
-    if reasons
-        .iter()
-        .any(|r| r == "orphan-ppid" || r == "orphan-parent")
-    {
+    if reasons.iter().any(|r| {
+        matches!(
+            r.as_str(),
+            "orphan-ppid" | "orphan-parent" | "orphan-parent-defunct"
+        )
+    }) {
         return true;
     }
     if reasons
@@ -458,6 +488,7 @@ fn format_reason_tag(tag: &str, p: &ProcessInfo) -> String {
             p.cpu
         ),
         "orphan-parent" => format!("orphan-parent (ppid {} missing)", p.ppid),
+        "orphan-parent-defunct" => format!("orphan-parent (ppid {} defunct)", p.ppid),
         "orphan-ppid" => "orphan-ppid (launchd)".into(),
         other => other.to_string(),
     }
@@ -487,6 +518,21 @@ mod tests {
             cwd: None,
             run_time_secs,
             is_zombie: false,
+        }
+    }
+
+    fn zombie_proc(pid: u32, ppid: u32, name: &str, run_time_secs: u64) -> ProcessInfo {
+        ProcessInfo {
+            pid,
+            ppid,
+            name: name.into(),
+            cpu: 0.0,
+            memory_bytes: 0,
+            ports: vec![],
+            command: None,
+            cwd: None,
+            run_time_secs,
+            is_zombie: true,
         }
     }
 
@@ -654,5 +700,30 @@ mod tests {
         let listening = vec![(3000, 400)];
         let out = propose_leftovers(&procs, &listening);
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn proposes_orphan_when_parent_is_zombie_in_snapshot() {
+        let procs = vec![
+            zombie_proc(50, 1, "bash", 3600),
+            proc_with(100, 50, "node", 0.0, 120, vec![3000], None),
+        ];
+        let listening = vec![(3000, 100)];
+        let out = propose_leftovers(&procs, &listening);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].reasons.iter().any(|r| r == "orphan-parent-defunct"));
+        let display = format_reasons_display(&out[0]);
+        assert!(display
+            .iter()
+            .any(|s| s == "orphan-parent (ppid 50 defunct)"));
+    }
+
+    #[test]
+    fn proposes_nested_worker_when_grandparent_missing() {
+        let procs = vec![proc_with(101, 100, "esbuild", 0.0, 60, vec![], None)];
+        let listening = vec![];
+        let out = propose_leftovers(&procs, &listening);
+        assert_eq!(out.len(), 1);
+        assert!(out[0].reasons.iter().any(|r| r == "orphan-parent"));
     }
 }
