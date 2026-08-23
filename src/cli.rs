@@ -24,6 +24,7 @@ pub enum SubCommand {
     Disk {
         top: Option<usize>,
     },
+    Cache,
     Docker,
     Memory {
         action: Option<MemoryAction>,
@@ -115,6 +116,7 @@ enum RawSub {
         #[arg(long)]
         top: Option<usize>,
     },
+    Cache,
     Docker,
     #[command(visible_alias = "m")]
     Memory {
@@ -196,6 +198,7 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             RawSub::History { last } => Target::Sub(SubCommand::History { last }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
             RawSub::Disk { top } => Target::Sub(SubCommand::Disk { top }),
+            RawSub::Cache => Target::Sub(SubCommand::Cache),
             RawSub::Docker => Target::Sub(SubCommand::Docker),
             RawSub::Memory {
                 action,
