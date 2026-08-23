@@ -1,6 +1,7 @@
 pub mod clean;
 pub mod cli;
 pub mod commands;
+pub mod disk;
 pub mod error;
 pub mod history;
 pub mod json_output;

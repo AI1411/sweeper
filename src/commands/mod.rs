@@ -1,5 +1,6 @@
 pub mod clean;
 pub mod confirm;
+pub mod disk;
 pub mod history;
 pub mod memory;
 pub mod name;

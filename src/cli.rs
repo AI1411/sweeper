@@ -21,6 +21,9 @@ pub enum SubCommand {
     Project {
         name: Option<String>,
     },
+    Disk {
+        top: Option<usize>,
+    },
     Memory {
         action: Option<MemoryAction>,
         sort: Option<String>,
@@ -101,6 +104,12 @@ enum RawSub {
     },
     #[command(visible_alias = "proj")]
     Project { name: Option<String> },
+    #[command(visible_alias = "d")]
+    Disk {
+        /// Show only the top N disk categories
+        #[arg(long)]
+        top: Option<usize>,
+    },
     #[command(visible_alias = "m")]
     Memory {
         #[command(subcommand)]
@@ -168,6 +177,7 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             RawSub::Clean { exclude } => Target::Sub(SubCommand::Clean { exclude }),
             RawSub::History { last } => Target::Sub(SubCommand::History { last }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
+            RawSub::Disk { top } => Target::Sub(SubCommand::Disk { top }),
             RawSub::Memory {
                 action,
                 sort,

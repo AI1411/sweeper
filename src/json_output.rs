@@ -200,3 +200,35 @@ impl From<crate::memory::ReclaimResult> for ReclaimResultJson {
         }
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct DiskRowJson {
+    pub kind: String,
+    pub total_bytes: u64,
+    pub reclaimable_bytes: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DiskJson {
+    pub rows: Vec<DiskRowJson>,
+    pub total_bytes: u64,
+    pub reclaimable_bytes: u64,
+}
+
+impl From<&crate::disk::DockerDiskReport> for DiskJson {
+    fn from(report: &crate::disk::DockerDiskReport) -> Self {
+        Self {
+            rows: report
+                .rows
+                .iter()
+                .map(|r| DiskRowJson {
+                    kind: r.kind.clone(),
+                    total_bytes: r.total_bytes,
+                    reclaimable_bytes: r.reclaimable_bytes,
+                })
+                .collect(),
+            total_bytes: report.total_bytes,
+            reclaimable_bytes: report.reclaimable_bytes,
+        }
+    }
+}
