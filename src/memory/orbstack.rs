@@ -11,7 +11,11 @@ fn orbstack_vm_bytes_from_procs(procs: &[crate::process::ProcessInfo]) -> Option
             best = best.max(p.memory_bytes);
         }
     }
-    if best > 0 { Some(best) } else { None }
+    if best > 0 {
+        Some(best)
+    } else {
+        None
+    }
 }
 
 /// Estimate OrbStack VM memory from running processes (macOS only).
@@ -57,9 +61,6 @@ mod tests {
                 is_zombie: false,
             },
         ];
-        assert_eq!(
-            orbstack_vm_bytes_from_procs(&procs),
-            Some(18_400_000_000)
-        );
+        assert_eq!(orbstack_vm_bytes_from_procs(&procs), Some(18_400_000_000));
     }
 }
