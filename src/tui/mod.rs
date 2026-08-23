@@ -19,7 +19,7 @@ use ratatui::Terminal;
 use crate::history::{append_entry, HistoryEntry, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
-use crate::process::ports::listening_ports;
+use crate::process::ports::listening_ports_cached;
 use crate::process::tree::collect_tree_pids;
 
 enum Msg {
@@ -82,7 +82,7 @@ pub fn run() -> anyhow::Result<()> {
 
 fn spawn_port_loader(tx: mpsc::Sender<Msg>) {
     thread::spawn(move || {
-        if let Ok(ports) = listening_ports() {
+        if let Ok(ports) = listening_ports_cached(false) {
             let _ = tx.send(Msg::Ports(ports));
         } else {
             let _ = tx.send(Msg::Ports(Vec::new()));
@@ -119,6 +119,7 @@ fn handle_key(
         return Ok(false);
     }
     if key.code == KeyCode::Char('r') {
+        crate::process::ports::clear_port_cache();
         app.refresh();
         app.status = "Refreshing processes + ports…".into();
         spawn_port_loader(tx.clone());
@@ -287,7 +288,7 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
     }
 
     app.refresh();
-    if let Ok(ports) = listening_ports() {
+    if let Ok(ports) = listening_ports_cached(false) {
         app.apply_ports(&ports);
     }
     let kind = if tree { "tree " } else { "" };

@@ -1,11 +1,26 @@
 use std::process::Command;
-use std::sync::Once;
+use std::sync::{Mutex, Once, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::error::{Result, SweeperError};
 use crate::process::ports_native;
 use crate::process::ProcessInfo;
 
 static LSOF_FALLBACK_HINT: Once = Once::new();
+const PORT_CACHE_TTL: Duration = Duration::from_secs(3);
+
+struct PortCacheEntry {
+    expires: Instant,
+    pairs: Vec<(u16, u32)>,
+}
+
+static PORT_CACHE: OnceLock<Mutex<Option<PortCacheEntry>>> = OnceLock::new();
+
+pub fn clear_port_cache() {
+    if let Some(lock) = PORT_CACHE.get() {
+        *lock.lock().expect("port cache lock") = None;
+    }
+}
 
 fn hint_lsof_fallback() {
     LSOF_FALLBACK_HINT.call_once(|| {
@@ -68,7 +83,7 @@ fn pids_for_port_lsof(port: u16) -> Result<Vec<u32>> {
     Ok(pids)
 }
 
-pub fn listening_ports() -> Result<Vec<(u16, u32)>> {
+fn fetch_listening_ports() -> Result<Vec<(u16, u32)>> {
     match ports_native::try_listening_ports() {
         Some(result) => match result {
             Ok(pairs) => Ok(pairs),
@@ -82,6 +97,29 @@ pub fn listening_ports() -> Result<Vec<(u16, u32)>> {
             listening_ports_lsof()
         }
     }
+}
+
+pub fn listening_ports() -> Result<Vec<(u16, u32)>> {
+    listening_ports_cached(false)
+}
+
+pub fn listening_ports_cached(bypass_cache: bool) -> Result<Vec<(u16, u32)>> {
+    if bypass_cache {
+        return fetch_listening_ports();
+    }
+    let lock = PORT_CACHE.get_or_init(|| Mutex::new(None));
+    let mut guard = lock.lock().expect("port cache lock");
+    if let Some(entry) = guard.as_ref() {
+        if Instant::now() < entry.expires {
+            return Ok(entry.pairs.clone());
+        }
+    }
+    let pairs = fetch_listening_ports()?;
+    *guard = Some(PortCacheEntry {
+        expires: Instant::now() + PORT_CACHE_TTL,
+        pairs: pairs.clone(),
+    });
+    Ok(pairs)
 }
 
 pub fn pids_for_port(port: u16) -> Result<Vec<u32>> {
@@ -107,5 +145,19 @@ pub fn merge_ports(procs: &mut [ProcessInfo], port_map: &[(u16, u32)]) {
                 p.ports.push(*port);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+
+    #[test]
+    fn clear_port_cache_is_safe() {
+        clear_port_cache();
+        let first = listening_ports_cached(false).expect("ports");
+        let second = listening_ports_cached(false).expect("ports again");
+        assert_eq!(first, second);
+        clear_port_cache();
     }
 }
