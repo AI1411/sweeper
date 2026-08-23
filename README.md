@@ -36,6 +36,8 @@ cargo install --git https://github.com/AI1411/sweeper --tag v0.1.0
 
 Prebuilt binaries for Linux (x86_64) and macOS (arm64 / x86_64) are attached to [GitHub Releases](https://github.com/AI1411/sweeper/releases). Download the archive for your platform, extract `sw`, and place it on your `PATH`.
 
+Man page source: [`docs/sw.1.md`](docs/sw.1.md) (install manually to your `MANPATH` if desired).
+
 ## Quick start
 
 ```bash
