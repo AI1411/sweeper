@@ -177,3 +177,90 @@ fn exclude_filters_by_command() {
     let out = apply_excludes(cands, &["vite".into()]);
     assert!(out.is_empty());
 }
+
+#[test]
+fn detects_uvicorn_from_command_line() {
+    let procs = vec![proc(
+        900,
+        1,
+        "python",
+        0.0,
+        60,
+        vec![8000],
+        Some("uvicorn main:app --reload --port 8000"),
+    )];
+    let listening = vec![(8000, 900)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "stack:uvicorn"));
+}
+
+#[test]
+fn detects_fastapi_from_command_line() {
+    let procs = vec![proc(
+        901,
+        1,
+        "python",
+        0.0,
+        60,
+        vec![8000],
+        Some("fastapi run app/main.py"),
+    )];
+    let listening = vec![(8000, 901)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "stack:fastapi"));
+}
+
+#[test]
+fn detects_pnpm_from_command_line() {
+    let procs = vec![proc(902, 1, "node", 0.0, 60, vec![], Some("pnpm dev"))];
+    let out = propose_leftovers(&procs, &[]);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "stack:pnpm"));
+    assert!(out[0].reasons.iter().any(|r| r == "orphan-ppid"));
+}
+
+#[test]
+fn detects_astro_from_command_line() {
+    let procs = vec![proc(
+        903,
+        1,
+        "node",
+        0.0,
+        60,
+        vec![4321],
+        Some("node_modules/.bin/astro dev"),
+    )];
+    let listening = vec![(4321, 903)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "stack:astro"));
+}
+
+#[test]
+fn detects_eslint_server_from_command_line() {
+    let procs = vec![proc(
+        904,
+        1,
+        "node",
+        0.0,
+        60,
+        vec![],
+        Some("node eslintServer.js --stdio"),
+    )];
+    let out = propose_leftovers(&procs, &[]);
+    assert_eq!(out.len(), 1);
+    assert!(out[0].reasons.iter().any(|r| r == "stack:eslint"));
+}
+
+#[test]
+fn skips_postgres_and_redis_without_stale_signals() {
+    let procs = vec![
+        proc(905, 1, "postgres", 2.0, 3600, vec![5432], None),
+        proc(906, 1, "redis-server", 1.0, 3600, vec![6379], None),
+    ];
+    let listening = vec![(5432, 905), (6379, 906)];
+    let out = propose_leftovers(&procs, &listening);
+    assert!(out.is_empty());
+}

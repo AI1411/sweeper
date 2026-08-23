@@ -31,6 +31,10 @@ const NAME_HINTS: &[&str] = &[
     "pyright",
     "docker",
     "com.docker",
+    "uvicorn",
+    "pnpm",
+    "astro",
+    "eslint",
 ];
 
 struct CmdPattern {
@@ -90,6 +94,31 @@ const CMD_PATTERNS: &[CmdPattern] = &[
     CmdPattern {
         stack: "docker",
         patterns: &["docker-proxy", "com.docker"],
+    },
+    // e.g. `uvicorn main:app --reload`
+    CmdPattern {
+        stack: "uvicorn",
+        patterns: &["uvicorn", "gunicorn"],
+    },
+    // e.g. `fastapi run` / uvicorn with fastapi app path
+    CmdPattern {
+        stack: "fastapi",
+        patterns: &["fastapi", "uvicorn main:app"],
+    },
+    // e.g. `pnpm dev` / `node_modules/.bin/pnpm`
+    CmdPattern {
+        stack: "pnpm",
+        patterns: &["pnpm dev", "pnpm run", "node_modules/.bin/pnpm"],
+    },
+    // e.g. `astro dev`
+    CmdPattern {
+        stack: "astro",
+        patterns: &["astro dev", "node_modules/.bin/astro"],
+    },
+    // e.g. ESLint language server / `eslint --fix`
+    CmdPattern {
+        stack: "eslint",
+        patterns: &["eslint", "vscode-eslint", "eslintServer"],
     },
 ];
 
