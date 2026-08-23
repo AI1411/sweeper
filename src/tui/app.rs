@@ -535,6 +535,7 @@ impl App {
             p.ports.clear();
         }
         crate::process::ports::merge_ports(&mut self.processes, port_map);
+        crate::process::list::sort_processes_for_display(&mut self.processes);
         self.refilter();
         let with_ports = self
             .processes
@@ -555,6 +556,7 @@ impl App {
         if !self.last_ports.is_empty() {
             crate::process::ports::merge_ports(&mut self.processes, &self.last_ports);
         }
+        crate::process::list::sort_processes_for_display(&mut self.processes);
         self.project_groups = group_projects(&self.processes);
         self.refilter();
     }

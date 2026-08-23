@@ -40,7 +40,22 @@ pub fn list_processes() -> Vec<ProcessInfo> {
         });
     }
     out.sort_by_key(|a| a.name.to_lowercase());
+    sort_processes_for_display(&mut out);
     out
+}
+
+/// Developer-centric ordering: listeners first, then memory, CPU, name.
+pub fn sort_processes_for_display(procs: &mut [ProcessInfo]) {
+    procs.sort_by(|a, b| {
+        let a_listen = !a.ports.is_empty();
+        let b_listen = !b.ports.is_empty();
+        b_listen
+            .cmp(&a_listen)
+            .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+            .then_with(|| b.cpu.total_cmp(&a.cpu))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then_with(|| a.pid.cmp(&b.pid))
+    });
 }
 
 /// Refresh CPU, memory, and liveness for an existing snapshot; add new PIDs and drop exited ones.
@@ -137,6 +152,38 @@ mod tests {
             Some("/usr/bin/node ./node_modules/.bin/vite")
         ));
         assert!(!name_matches("vite", "node", Some("node server.js")));
+    }
+
+    #[test]
+    fn sort_processes_for_display_orders_listeners_first() {
+        let mut procs = vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 0,
+                name: "bash".into(),
+                cpu: 1.0,
+                memory_bytes: 500,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "node".into(),
+                cpu: 0.1,
+                memory_bytes: 1000,
+                ports: vec![3000],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        sort_processes_for_display(&mut procs);
+        assert_eq!(procs[0].pid, 2);
     }
 
     #[test]
