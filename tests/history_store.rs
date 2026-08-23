@@ -54,3 +54,21 @@ fn preserves_kill_signal() {
     assert_eq!(all[0].signal, KillSignal::Kill);
     assert_eq!(all[0].ports, vec![1, 2]);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn history_path_uses_xdg_data_dir() {
+    let path = sweeper::history::history_path().expect("history path");
+    let s = path.to_string_lossy();
+    assert!(s.contains(".local/share"));
+    assert!(s.ends_with("history.json"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn protect_config_uses_xdg_config_dir() {
+    let path = sweeper::process::protect::protect_config_path();
+    let s = path.to_string_lossy();
+    assert!(s.contains(".config/sweeper"));
+    assert!(s.ends_with("protect.toml"));
+}

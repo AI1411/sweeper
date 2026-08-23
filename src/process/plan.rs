@@ -99,7 +99,14 @@ mod tests {
 
     #[test]
     fn plan_marks_protected_processes() {
-        let procs = vec![proc(1, "node"), proc(2, "launchd")];
+        #[cfg(target_os = "macos")]
+        let protected_name = "launchd";
+        #[cfg(target_os = "linux")]
+        let protected_name = "systemd";
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let protected_name = "init";
+
+        let procs = vec![proc(1, "node"), proc(2, protected_name)];
         let planned = plan_kills(&procs, &[1, 2], false);
         assert_eq!(planned.len(), 2);
         assert!(!planned[0].protected);

@@ -2,9 +2,23 @@
 
 **Sweep unwanted processes away.**
 
-A developer-focused CLI/TUI for finding leftover processes and terminating them safely. Built for macOS; most commands also work on Linux.
+A developer-focused CLI/TUI for finding leftover processes and terminating them safely. Primary target is macOS; Linux is formally supported for CLI, TUI, ports, clean, and history.
 
 Binary name: `sw`
+
+## Platform compatibility
+
+| Feature | macOS | Linux |
+| --- | --- | --- |
+| TUI (`sw`) | Yes | Yes |
+| Name / port search | Yes | Yes |
+| `sw ports` / `sw top` | Yes | Yes |
+| `sw clean` / `sw history` | Yes | Yes |
+| `sw project` | Yes | Yes |
+| Native port lookup | libproc (lsof fallback) | `/proc/net/tcp` (lsof fallback) |
+| History file | `~/Library/Application Support/com.sweeper.sweeper/history.json` | `~/.local/share/com.sweeper.sweeper/history.json` (XDG) |
+| Protect config | `~/Library/Application Support/com.sweeper.sweeper/protect.toml` | `~/.config/sweeper/protect.toml` (XDG) |
+| Built-in protect list | macOS system daemons | Linux system daemons (`systemd`, `sshd`, …) |
 
 ## Install
 
@@ -101,7 +115,7 @@ Launch with bare `sw`.
 ## Safety
 
 - Default signal is **SIGTERM**. **SIGKILL** only with `--force` or TUI `K`.
-- Critical macOS process names are protected from kill.
+- Critical system processes are protected from kill (OS-specific built-in list).
 - `sw clean` never auto-kills — it proposes; you decide.
 - `sw clean` skips active dev servers; it flags orphans, stale/idle listeners, and zombies.
 - There is no `-y` / `--yes` skip for confirmations.
@@ -109,7 +123,7 @@ Launch with bare `sw`.
 
 ## Protected processes
 
-Built-in protection covers critical macOS system daemons. Extend the list with a config file:
+Built-in protection covers critical system daemons on macOS and Linux. Extend the list with a config file:
 
 ```text
 # ~/.config/sweeper/protect.toml  (Linux)

@@ -6,7 +6,8 @@ use std::sync::OnceLock;
 use directories::ProjectDirs;
 
 /// Built-in macOS system processes that must never be killed.
-const PROTECTED: &[&str] = &[
+#[cfg(target_os = "macos")]
+const PROTECTED_BUILTIN: &[&str] = &[
     "kernel_task",
     "launchd",
     "WindowServer",
@@ -33,6 +34,33 @@ const PROTECTED: &[&str] = &[
     "hidd",
     "airportd",
 ];
+
+/// Built-in Linux system processes that must never be killed.
+#[cfg(target_os = "linux")]
+const PROTECTED_BUILTIN: &[&str] = &[
+    "systemd",
+    "init",
+    "sshd",
+    "dbus-daemon",
+    "NetworkManager",
+    "cron",
+    "crond",
+    "rsyslogd",
+    "polkitd",
+    "agetty",
+    "systemd-journald",
+    "systemd-logind",
+    "systemd-udevd",
+    "systemd-resolved",
+    "systemd-networkd",
+    "kthreadd",
+    "irqbalance",
+    "udisksd",
+    "cupsd",
+];
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+const PROTECTED_BUILTIN: &[&str] = &[];
 
 static USER_PROTECTED: OnceLock<HashSet<String>> = OnceLock::new();
 
@@ -66,7 +94,10 @@ pub fn parse_protect_text(text: &str) -> HashSet<String> {
 
 pub fn is_protected(name: &str) -> bool {
     let base = basename(name);
-    if PROTECTED.iter().any(|p| base.eq_ignore_ascii_case(p)) {
+    if PROTECTED_BUILTIN
+        .iter()
+        .any(|p| base.eq_ignore_ascii_case(p))
+    {
         return true;
     }
     user_protected_names()
@@ -102,9 +133,18 @@ mod tests {
         assert!(!names.contains("skip"));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn builtin_protected_still_works() {
         assert!(is_protected("launchd"));
         assert!(is_protected("coreaudiod"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn builtin_protected_still_works() {
+        assert!(is_protected("systemd"));
+        assert!(is_protected("sshd"));
+        assert!(is_protected("dbus-daemon"));
     }
 }
