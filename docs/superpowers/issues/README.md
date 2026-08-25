@@ -122,3 +122,19 @@ Suggested order:
 3. **UX:** 48, 51
 4. **Monitoring:** 52 → 53
 5. **Integration:** 54, 55
+
+## Trust & developer UX (2026-08)
+
+| # | File | GitHub | Title | Priority |
+|---|---|---|---|---|
+| 56 | `56-active-session-confidence-ux.md` | #128 | Strengthen active-session detection and confidence UX | high |
+| 57 | `57-shell-completion-doctor.md` | #129 | Shell completions and `sw doctor` diagnostics | high |
+| 58 | `58-tmux-monorepo-recognition.md` | #130 | tmux session and monorepo workspace recognition | medium |
+| 59 | `59-port-watch.md` | #131 | `sw watch :port` — wait for port state changes | medium |
+
+Suggested order:
+
+1. **Trust:** 56 (builds on closed #57, #78)
+2. **Onboarding:** 57
+3. **Grouping:** 58
+4. **Workflow:** 59
