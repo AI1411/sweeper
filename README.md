@@ -68,6 +68,8 @@ sw project app  # inspect / kill a project
 Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated).
 | `sw history` | `h` | Kill history (`--last` for one entry) |
 | `sw project` | `proj` | List inferred projects; `sw project <name>` to kill |
+
+`sw project` recognizes monorepo workspaces (`pnpm-workspace.yaml`, npm `workspaces`, `turbo.json`, `nx.json`) and shows tmux/screen session labels when detected. Different git worktree paths appear as separate groups. Remote/nested tmux sessions may not resolve a session name.
 | `sw doctor` | — | Diagnose setup (permissions, port lookup, config paths) |
 | `sw completions <shell>` | — | Generate shell completions (`bash`, `zsh`, `fish`) |
 

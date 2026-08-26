@@ -44,6 +44,9 @@ fn project_rows(groups: &[ProjectGroup]) -> Vec<ProjectJson> {
                 process_count: g.processes.len(),
                 memory_bytes,
                 ports,
+                workspace_root: g.workspace_root.clone(),
+                package_name: g.package_name.clone(),
+                session_label: g.session_label.clone(),
             }
         })
         .collect()
@@ -72,13 +75,19 @@ fn list_all(groups: &[ProjectGroup]) -> anyhow::Result<()> {
                 .collect::<Vec<_>>()
                 .join(",")
         };
+        let session = g
+            .session_label
+            .as_deref()
+            .map(|s| format!("  {s}"))
+            .unwrap_or_default();
         println!(
-            "{}  {}  {}  {}  {}",
-            style::process_name(format!("{:<20}", g.name)),
+            "{}  {}  {}  {}  {}{}",
+            style::process_name(format!("{:<24}", g.name)),
             style::dim(&g.path),
             style::dim(format!("{} procs", g.processes.len())),
             style::mem(format!("{:.0} MB", mem as f64 / (1024.0 * 1024.0))),
-            style::port(port_str)
+            style::port(port_str),
+            style::dim(session)
         );
     }
     println!(
