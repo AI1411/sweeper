@@ -762,8 +762,7 @@ mod tests {
     fn active_session_young_shell_parent() {
         let parent = proc_with(42, 1, "zsh", 0.0, 3600, vec![], None);
         let child = proc_with(100, 42, "node", 0.0, 120, vec![3000], None);
-        let by_pid: HashMap<u32, &ProcessInfo> =
-            [(42, &parent)].into_iter().map(|(k, v)| (k, v)).collect();
+        let by_pid: HashMap<u32, &ProcessInfo> = [(42, &parent)].into_iter().collect();
         assert!(is_likely_active_session(
             &child,
             Some(&parent),
@@ -783,8 +782,7 @@ mod tests {
     fn active_session_ide_ancestor() {
         let ide = proc_with(10, 1, "Cursor Helper", 0.0, 3600, vec![], None);
         let child = proc_with(100, 10, "node", 0.0, 120, vec![3000], None);
-        let by_pid: HashMap<u32, &ProcessInfo> =
-            [(10, &ide)].into_iter().map(|(k, v)| (k, v)).collect();
+        let by_pid: HashMap<u32, &ProcessInfo> = [(10, &ide)].into_iter().collect();
         assert!(is_likely_active_session(&child, Some(&ide), &by_pid, true));
     }
 
@@ -800,7 +798,7 @@ mod tests {
         };
         assert_eq!(confidence_level(&stale), "high");
         assert_eq!(confidence_level(&idle), "medium");
-        let mut cands = vec![idle.clone(), stale.clone()];
+        let mut cands = [idle.clone(), stale.clone()];
         cands.sort_by(compare_candidates);
         assert_eq!(cands[0].process.pid, 1);
         assert_eq!(cands[1].process.pid, 2);
