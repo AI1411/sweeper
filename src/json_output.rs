@@ -58,6 +58,12 @@ pub struct ProjectJson {
     pub process_count: usize,
     pub memory_bytes: u64,
     pub ports: Vec<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub package_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_label: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

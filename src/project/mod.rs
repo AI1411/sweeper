@@ -3,11 +3,20 @@ use std::path::Path;
 
 use crate::process::ProcessInfo;
 
+pub mod session;
+pub mod workspace;
+
+use session::infer_session_label;
+use workspace::infer_workspace_package;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectGroup {
     pub name: String,
     pub path: String,
     pub processes: Vec<ProcessInfo>,
+    pub session_label: Option<String>,
+    pub workspace_root: Option<String>,
+    pub package_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +44,12 @@ pub fn summarize_group(group: &ProjectGroup) -> ProjectSummary {
 /// Infer (project_name, project_path) from cwd or command line.
 pub fn infer_project(proc: &ProcessInfo) -> Option<(String, String)> {
     if let Some(cwd) = proc.cwd.as_deref() {
+        if let Some(ws) = infer_workspace_package(cwd) {
+            return Some((
+                ws.display_name,
+                ws.package_path.to_string_lossy().into_owned(),
+            ));
+        }
         if let Some(pair) = from_path(cwd) {
             return Some(pair);
         }
@@ -43,6 +58,24 @@ pub fn infer_project(proc: &ProcessInfo) -> Option<(String, String)> {
         return from_command(cmd);
     }
     None
+}
+
+pub fn infer_project_metadata(proc: &ProcessInfo) -> ProjectMetadata {
+    let mut meta = ProjectMetadata::default();
+    if let Some(cwd) = proc.cwd.as_deref() {
+        if let Some(ws) = infer_workspace_package(cwd) {
+            meta.workspace_root = Some(ws.workspace_root.to_string_lossy().into_owned());
+            meta.package_name = ws.package_name;
+        }
+    }
+    meta
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProjectMetadata {
+    pub workspace_root: Option<String>,
+    pub package_name: Option<String>,
+    pub session_label: Option<String>,
 }
 
 fn from_path(path: &str) -> Option<(String, String)> {
@@ -146,16 +179,32 @@ fn from_command(cmd: &str) -> Option<(String, String)> {
 }
 
 pub fn group_projects(procs: &[ProcessInfo]) -> Vec<ProjectGroup> {
+    let by_pid: std::collections::HashMap<u32, &ProcessInfo> =
+        procs.iter().map(|p| (p.pid, p)).collect();
     let mut map: BTreeMap<String, ProjectGroup> = BTreeMap::new();
     for p in procs {
         let Some((name, path)) = infer_project(p) else {
             continue;
         };
+        let meta = infer_project_metadata(p);
+        let session = infer_session_label(p, &by_pid);
         let entry = map.entry(path.clone()).or_insert_with(|| ProjectGroup {
-            name,
-            path,
+            name: name.clone(),
+            path: path.clone(),
             processes: Vec::new(),
+            session_label: session.clone(),
+            workspace_root: meta.workspace_root.clone(),
+            package_name: meta.package_name.clone(),
         });
+        if entry.session_label.is_none() {
+            entry.session_label = session;
+        }
+        if entry.workspace_root.is_none() {
+            entry.workspace_root = meta.workspace_root;
+        }
+        if entry.package_name.is_none() {
+            entry.package_name = meta.package_name;
+        }
         entry.processes.push(p.clone());
     }
     let mut groups: Vec<_> = map.into_values().collect();
@@ -257,6 +306,9 @@ mod tests {
             name: "app".into(),
             path: "/Users/me/app".into(),
             processes: vec![p1, p2],
+            session_label: None,
+            workspace_root: None,
+            package_name: None,
         };
         let s = summarize_group(&group);
         assert_eq!(s.process_count, 2);
