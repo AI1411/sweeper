@@ -49,7 +49,7 @@ fn session_label_from_process_name(name: &str) -> Option<String> {
 fn session_from_environ(pid: u32) -> Option<String> {
     #[cfg(target_os = "linux")]
     {
-        return linux_session_from_environ(pid);
+        linux_session_from_environ(pid)
     }
     #[cfg(not(target_os = "linux"))]
     {
