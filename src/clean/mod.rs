@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::process::protect::is_protected;
+use crate::process::tty::has_controlling_tty;
 use crate::process::ProcessInfo;
 
 /// A listener running longer than this is flagged as stale.
@@ -188,13 +189,25 @@ pub fn propose_leftovers(procs: &[ProcessInfo], listening: &[(u16, u32)]) -> Vec
         })
         .collect();
 
-    out.sort_by(|a, b| {
-        score_candidate(b)
-            .cmp(&score_candidate(a))
-            .then_with(|| a.process.name.cmp(&b.process.name))
-            .then_with(|| a.process.pid.cmp(&b.process.pid))
-    });
+    out.sort_by(compare_candidates);
     out
+}
+
+/// Sort clean candidates by confidence (high first), then score, then name/pid.
+pub fn compare_candidates(a: &CleanCandidate, b: &CleanCandidate) -> std::cmp::Ordering {
+    confidence_rank(confidence_level(b))
+        .cmp(&confidence_rank(confidence_level(a)))
+        .then_with(|| score_candidate(b).cmp(&score_candidate(a)))
+        .then_with(|| a.process.name.cmp(&b.process.name))
+        .then_with(|| a.process.pid.cmp(&b.process.pid))
+}
+
+fn confidence_rank(level: &str) -> u8 {
+    match level {
+        "high" => 3,
+        "medium" => 2,
+        _ => 1,
+    }
 }
 
 pub fn summarize(candidates: &[CleanCandidate]) -> CleanSummary {
@@ -283,20 +296,94 @@ fn detect_dev_stack(p: &ProcessInfo) -> Option<(String, String)> {
 
 /// Heuristics for an in-progress dev session (not a leftover).
 ///
-/// - `run_time < 15m` and `CPU >= 0.1%` → likely active (not stale / orphan)
-/// - Parent is an interactive shell (`zsh`, `bash`, `fish`) and process is young → likely active
-pub fn is_likely_active_session(p: &ProcessInfo, parent: Option<&ProcessInfo>) -> bool {
+/// Documented rules (all require a young process unless noted):
+///
+/// 1. **Recent CPU** — `run_time < 15m` and `CPU >= 0.1%` → active.
+///    Example: vite started 2m ago at 2% CPU → excluded from stale/orphan rules.
+///
+/// 2. **Interactive shell parent** — parent is `zsh`/`bash`/`fish`/… and process is young.
+///    Example: `bash` → `node :3000` started 5m ago → excluded.
+///
+/// 3. **IDE-launched** — parent chain includes `Cursor`, `Code Helper`, `idea`, etc. and process is young.
+///    Example: `Cursor Helper` → `node` vite 3m ago → excluded.
+///
+/// 4. **TTY-attached listener** — process is LISTEN, has a controlling TTY, and an interactive-shell ancestor.
+///    Example: dev server in a terminal tab with `zsh` ancestor → excluded even past 15m if still TTY-bound.
+///
+/// Deferred: restart detection via history (same cwd + command hash within N minutes).
+pub fn is_likely_active_session(
+    p: &ProcessInfo,
+    parent: Option<&ProcessInfo>,
+    by_pid: &HashMap<u32, &ProcessInfo>,
+    listening: bool,
+) -> bool {
     let young = p.run_time_secs < ACTIVE_SESSION_MAX_SECS;
-    if !young {
-        return false;
-    }
-    if p.cpu >= ACTIVE_CPU_THRESHOLD {
+    if young && p.cpu >= ACTIVE_CPU_THRESHOLD {
         return true;
     }
-    if let Some(parent) = parent {
+    if young {
+        if let Some(parent) = parent {
+            if !parent.is_zombie && is_interactive_shell(&parent.name) {
+                return true;
+            }
+        }
+        if has_ide_ancestor(p, by_pid) {
+            return true;
+        }
+    }
+    if listening && has_controlling_tty(p.pid) && has_interactive_shell_ancestor(p, by_pid) {
+        return true;
+    }
+    false
+}
+
+const IDE_LAUNCHERS: &[&str] = &[
+    "cursor",
+    "code helper",
+    "code",
+    "electron",
+    "idea",
+    "webstorm",
+    "pycharm",
+    "goland",
+    "clion",
+    "rider",
+    "fleet",
+    "zed",
+    "windsurf",
+];
+
+fn is_ide_launcher(name: &str) -> bool {
+    let n = name.to_lowercase();
+    IDE_LAUNCHERS.iter().any(|hint| n.contains(hint))
+}
+
+fn has_ide_ancestor(p: &ProcessInfo, by_pid: &HashMap<u32, &ProcessInfo>) -> bool {
+    let mut current_ppid = p.ppid;
+    let mut seen = HashSet::new();
+    while current_ppid != 0 && seen.insert(current_ppid) {
+        let Some(parent) = by_pid.get(&current_ppid) else {
+            break;
+        };
+        if is_ide_launcher(&parent.name) {
+            return true;
+        }
+        current_ppid = parent.ppid;
+    }
+    false
+}
+
+fn has_interactive_shell_ancestor(p: &ProcessInfo, by_pid: &HashMap<u32, &ProcessInfo>) -> bool {
+    let mut current_ppid = p.ppid;
+    let mut seen = HashSet::new();
+    while current_ppid != 0 && seen.insert(current_ppid) {
+        let Some(parent) = by_pid.get(&current_ppid) else {
+            break;
+        };
         if !parent.is_zombie && is_interactive_shell(&parent.name) {
             return true;
         }
+        current_ppid = parent.ppid;
     }
     false
 }
@@ -341,7 +428,7 @@ fn collect_reasons(
 ) -> Vec<String> {
     let mut reasons = vec![stack_reason.to_string()];
     let listening = listen_pids.contains(&p.pid);
-    let active_session = is_likely_active_session(p, parent);
+    let active_session = is_likely_active_session(p, parent, by_pid, listening);
     let orphan_ppid = !active_session && (p.ppid == 0 || p.ppid == 1);
     let chain_orphan = if !active_session && !orphan_ppid {
         detect_orphan_chain(p, by_pid, pid_set)
@@ -667,20 +754,56 @@ mod tests {
     #[test]
     fn active_session_young_high_cpu() {
         let p = proc_with(1, 1, "node", 5.0, 120, vec![3000], None);
-        assert!(is_likely_active_session(&p, None));
+        let by_pid = HashMap::new();
+        assert!(is_likely_active_session(&p, None, &by_pid, true));
     }
 
     #[test]
     fn active_session_young_shell_parent() {
         let parent = proc_with(42, 1, "zsh", 0.0, 3600, vec![], None);
         let child = proc_with(100, 42, "node", 0.0, 120, vec![3000], None);
-        assert!(is_likely_active_session(&child, Some(&parent)));
+        let by_pid: HashMap<u32, &ProcessInfo> =
+            [(42, &parent)].into_iter().map(|(k, v)| (k, v)).collect();
+        assert!(is_likely_active_session(
+            &child,
+            Some(&parent),
+            &by_pid,
+            true
+        ));
     }
 
     #[test]
     fn not_active_session_when_old() {
         let p = proc_with(1, 1, "node", 5.0, ACTIVE_SESSION_MAX_SECS, vec![3000], None);
-        assert!(!is_likely_active_session(&p, None));
+        let by_pid = HashMap::new();
+        assert!(!is_likely_active_session(&p, None, &by_pid, true));
+    }
+
+    #[test]
+    fn active_session_ide_ancestor() {
+        let ide = proc_with(10, 1, "Cursor Helper", 0.0, 3600, vec![], None);
+        let child = proc_with(100, 10, "node", 0.0, 120, vec![3000], None);
+        let by_pid: HashMap<u32, &ProcessInfo> =
+            [(10, &ide)].into_iter().map(|(k, v)| (k, v)).collect();
+        assert!(is_likely_active_session(&child, Some(&ide), &by_pid, true));
+    }
+
+    #[test]
+    fn candidates_sorted_by_confidence_then_score() {
+        let stale = CleanCandidate {
+            process: proc_with(1, 50, "node", 0.0, STALE_SERVER_SECS, vec![3000], None),
+            reasons: vec!["stale-server".into()],
+        };
+        let idle = CleanCandidate {
+            process: proc_with(2, 50, "bun", 0.1, IDLE_LISTENER_SECS, vec![8787], None),
+            reasons: vec!["idle-listener".into()],
+        };
+        assert_eq!(confidence_level(&stale), "high");
+        assert_eq!(confidence_level(&idle), "medium");
+        let mut cands = vec![idle.clone(), stale.clone()];
+        cands.sort_by(compare_candidates);
+        assert_eq!(cands[0].process.pid, 1);
+        assert_eq!(cands[1].process.pid, 2);
     }
 
     #[test]

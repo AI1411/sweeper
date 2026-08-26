@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use ratatui::widgets::TableState;
 
+use crate::clean::{confidence_level, propose_leftovers, CleanCandidate};
 use crate::memory::{format_bytes, format_estimate};
 use crate::process::tree::{layout_tree_rows, TreeRow};
 use crate::process::ProcessInfo;
@@ -12,6 +13,7 @@ use crate::tui::resources::{load_resource_snapshot, ResourcePanel, ResourceSnaps
 pub enum ViewMode {
     Processes,
     Projects,
+    Clean,
 }
 
 /// Kill parameters awaiting TUI confirmation ([y/N]).
@@ -45,6 +47,9 @@ pub struct App {
     pub view_mode: ViewMode,
     pub project_groups: Vec<ProjectGroup>,
     pub expanded_project: Option<usize>,
+    pub clean_proposals: Vec<CleanCandidate>,
+    pub clean_filtered: Vec<usize>,
+    pub clean_high_only: bool,
     pub resources_open: bool,
     pub resource_panel: ResourcePanel,
     pub resource_snapshot: ResourceSnapshot,
@@ -73,6 +78,9 @@ impl App {
             view_mode: ViewMode::Processes,
             project_groups: Vec::new(),
             expanded_project: None,
+            clean_proposals: Vec::new(),
+            clean_filtered: Vec::new(),
+            clean_high_only: false,
             resources_open: false,
             resource_panel: ResourcePanel::default(),
             resource_snapshot: ResourceSnapshot::unavailable(),
@@ -245,25 +253,105 @@ impl App {
     }
 
     pub fn toggle_project_view(&mut self) {
-        if self.view_mode == ViewMode::Processes {
-            self.resources_open = false;
-            self.view_mode = ViewMode::Projects;
-            self.tree_view = false;
-            self.tree_rows.clear();
-            self.show_detail = false;
-            self.expanded_project = None;
-            self.selected.clear();
-            self.cursor = 0;
-            self.project_groups = group_projects(&self.processes);
-            self.refilter();
-            self.status = format!("Projects: {} group(s) [P back]", self.project_groups.len());
-        } else {
+        if self.view_mode == ViewMode::Projects {
             self.view_mode = ViewMode::Processes;
             self.expanded_project = None;
             self.cursor = 0;
             self.refilter();
             self.status = "View: processes".into();
+            return;
         }
+        self.resources_open = false;
+        self.view_mode = ViewMode::Projects;
+        self.tree_view = false;
+        self.tree_rows.clear();
+        self.show_detail = false;
+        self.expanded_project = None;
+        self.clean_high_only = false;
+        self.clean_proposals.clear();
+        self.clean_filtered.clear();
+        self.selected.clear();
+        self.cursor = 0;
+        self.project_groups = group_projects(&self.processes);
+        self.refilter();
+        self.status = format!("Projects: {} group(s) [P back]", self.project_groups.len());
+    }
+
+    pub fn toggle_clean_view(&mut self) {
+        if self.view_mode == ViewMode::Clean {
+            self.view_mode = ViewMode::Processes;
+            self.clean_proposals.clear();
+            self.clean_filtered.clear();
+            self.clean_high_only = false;
+            self.cursor = 0;
+            self.refilter();
+            self.status = "View: processes".into();
+            return;
+        }
+        self.resources_open = false;
+        self.view_mode = ViewMode::Clean;
+        self.tree_view = false;
+        self.tree_rows.clear();
+        self.show_detail = false;
+        self.expanded_project = None;
+        self.selected.clear();
+        self.cursor = 0;
+        self.refresh_clean_proposals();
+        self.status = format!(
+            "Clean: {} candidate(s) [c back, H high-only]",
+            self.clean_filtered.len()
+        );
+    }
+
+    pub fn toggle_clean_high_only(&mut self) {
+        if self.view_mode != ViewMode::Clean {
+            return;
+        }
+        self.clean_high_only = !self.clean_high_only;
+        self.cursor = 0;
+        self.refilter_clean();
+        let filter = if self.clean_high_only {
+            "high confidence only"
+        } else {
+            "all confidence levels"
+        };
+        self.status = format!(
+            "Clean: {} candidate(s) ({filter})",
+            self.clean_filtered.len()
+        );
+    }
+
+    pub fn refresh_clean_proposals(&mut self) {
+        self.clean_proposals = propose_leftovers(&self.processes, &self.last_ports);
+        self.refilter_clean();
+    }
+
+    fn refilter_clean(&mut self) {
+        self.clean_filtered = self
+            .clean_proposals
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| !self.clean_high_only || confidence_level(c) == "high")
+            .map(|(i, _)| i)
+            .collect();
+        if self.cursor >= self.clean_filtered.len() && !self.clean_filtered.is_empty() {
+            self.cursor = self.clean_filtered.len() - 1;
+        }
+        if self.clean_filtered.is_empty() {
+            self.cursor = 0;
+        }
+        self.sync_table_state();
+    }
+
+    pub fn in_clean_list(&self) -> bool {
+        self.view_mode == ViewMode::Clean
+    }
+
+    pub fn visible_clean_candidates(&self) -> Vec<&CleanCandidate> {
+        self.clean_filtered
+            .iter()
+            .filter_map(|i| self.clean_proposals.get(*i))
+            .collect()
     }
 
     pub fn toggle_project_expand(&mut self) {
@@ -358,7 +446,9 @@ impl App {
     }
 
     fn display_len(&self) -> usize {
-        if self.in_project_list() {
+        if self.in_clean_list() {
+            self.clean_filtered.len()
+        } else if self.in_project_list() {
             self.visible_project_groups().len()
         } else if self.tree_view {
             self.tree_rows.len()
@@ -368,6 +458,13 @@ impl App {
     }
 
     pub fn current_process(&self) -> Option<&ProcessInfo> {
+        if self.in_clean_list() {
+            return self
+                .clean_filtered
+                .get(self.cursor)
+                .and_then(|i| self.clean_proposals.get(*i))
+                .map(|c| &c.process);
+        }
         if self.tree_view {
             self.tree_rows
                 .get(self.cursor)
@@ -438,8 +535,8 @@ impl App {
     }
 
     pub fn sync_table_state(&mut self) {
-        if self.in_project_list() {
-            let len = self.visible_project_groups().len();
+        if self.in_clean_list() || self.in_project_list() {
+            let len = self.display_len();
             self.table_state
                 .select(if len == 0 { None } else { Some(self.cursor) });
             return;
@@ -452,6 +549,10 @@ impl App {
     }
 
     pub fn refilter(&mut self) {
+        if self.view_mode == ViewMode::Clean {
+            self.refresh_clean_proposals();
+            return;
+        }
         if self.view_mode == ViewMode::Projects {
             self.project_groups = group_projects(&self.processes);
             if let Some(idx) = self.expanded_project {
@@ -686,7 +787,11 @@ impl App {
         }
         crate::process::ports::merge_ports(&mut self.processes, port_map);
         crate::process::list::sort_processes_for_display(&mut self.processes);
-        self.refilter();
+        if self.view_mode == ViewMode::Clean {
+            self.refresh_clean_proposals();
+        } else {
+            self.refilter();
+        }
         let with_ports = self
             .processes
             .iter()
@@ -708,7 +813,11 @@ impl App {
         }
         crate::process::list::sort_processes_for_display(&mut self.processes);
         self.project_groups = group_projects(&self.processes);
-        self.refilter();
+        if self.view_mode == ViewMode::Clean {
+            self.refresh_clean_proposals();
+        } else {
+            self.refilter();
+        }
     }
 }
 

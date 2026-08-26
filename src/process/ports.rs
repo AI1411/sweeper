@@ -70,7 +70,7 @@ fn listening_ports_lsof() -> Result<Vec<(u16, u32)>> {
 
 fn pids_for_port_lsof(port: u16) -> Result<Vec<u32>> {
     let output = Command::new("lsof")
-        .args(["-nP", &format!("-iTCP:{}", port), "-sTCP:LISTEN", "-t"])
+        .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-t"])
         .output()
         .map_err(|e| SweeperError::Lsof(e.to_string()))?;
     let text = String::from_utf8_lossy(&output.stdout);

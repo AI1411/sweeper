@@ -42,31 +42,14 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
         return emit_json(&payload);
     }
 
-    println!("{}\n", style::header("Sweeper found possible leftovers:"));
+    println!(
+        "{}\n",
+        style::header("Sweeper found possible leftovers (sorted by confidence):")
+    );
     print_summary_lines(&summary, proposals.len(), reclaim_estimate.as_ref());
 
     for c in &proposals {
-        let p = &c.process;
-        let age = format_age(p.run_time_secs);
-        let reasons = format_reasons_display(c);
-        let confidence = confidence_level(c);
-        println!(
-            "  {} {} {} {} {:?} {} {}  {} {}  {} {}",
-            style::process_name(&p.name),
-            style::dim("pid"),
-            style::pid(p.pid),
-            style::dim("ports"),
-            p.ports,
-            style::dim("age"),
-            style::dim(age),
-            style::dim("confidence:"),
-            style::warn(confidence),
-            style::dim("reasons:"),
-            style::warn(reasons.join(", "))
-        );
-        if let Some(cmd) = format_command_snippet(p.command.as_deref()) {
-            println!("    {} {}", style::dim("cmd:"), style::dim(cmd));
-        }
+        print_candidate_block(c);
     }
     if proposals.is_empty() {
         return Ok(());
@@ -371,6 +354,59 @@ pub fn format_summary_lines(
         }
     }
     writeln!(out).unwrap();
+    out
+}
+
+fn print_candidate_block(c: &crate::clean::CleanCandidate) {
+    print!("{}", format_candidate_block(c));
+}
+
+pub fn format_candidate_block(c: &crate::clean::CleanCandidate) -> String {
+    use std::fmt::Write;
+    let p = &c.process;
+    let age = format_age(p.run_time_secs);
+    let confidence = confidence_level(c);
+    let port_str = if p.ports.is_empty() {
+        "-".to_string()
+    } else {
+        p.ports
+            .iter()
+            .map(|port| format!(":{port}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    let stack = c
+        .reasons
+        .iter()
+        .find(|r| r.starts_with("stack:"))
+        .map(|r| r.strip_prefix("stack:").unwrap_or(r))
+        .unwrap_or("-");
+    let mut out = String::new();
+    writeln!(
+        out,
+        "  {} {} {} {} {} {} {} {} {}",
+        style::confidence_badge(confidence),
+        style::process_name(&p.name),
+        style::dim("pid"),
+        style::pid(p.pid),
+        style::port(port_str),
+        style::dim("age"),
+        style::dim(age),
+        style::dim("stack:"),
+        style::dim(stack)
+    )
+    .unwrap();
+    let reasons = format_reasons_display(c);
+    writeln!(
+        out,
+        "         {} {}",
+        style::dim("reasons:"),
+        style::warn(reasons.join(", "))
+    )
+    .unwrap();
+    if let Some(cmd) = format_command_snippet(p.command.as_deref()) {
+        writeln!(out, "         {} {}", style::dim("cmd:"), style::dim(cmd)).unwrap();
+    }
     out
 }
 
