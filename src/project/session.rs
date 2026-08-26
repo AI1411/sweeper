@@ -72,6 +72,7 @@ fn linux_session_from_environ(pid: u32) -> Option<String> {
     None
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn parse_tmux_env(value: &str) -> Option<String> {
     // TMUX=/tmp/tmux-1000/default,12345,0
     let path = value.split(',').next()?;
