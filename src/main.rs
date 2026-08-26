@@ -1,7 +1,7 @@
 use sweeper::cli::{Cli, SubCommand, Target};
 use sweeper::commands::{
     cache, clean, completions, disk, docker, doctor, history, memory, name, port, ports_list,
-    project, top,
+    project, top, watch,
 };
 use sweeper::json_output;
 use sweeper::memory::MemorySort;
@@ -47,6 +47,26 @@ fn main() -> anyhow::Result<()> {
         }
         Target::Sub(SubCommand::Completions { shell }) => completions::run_completions(&shell)?,
         Target::Sub(SubCommand::Doctor) => doctor::run_doctor(json)?,
+        Target::Sub(SubCommand::Watch {
+            ports,
+            until,
+            interval,
+            timeout,
+            quiet,
+        }) => {
+            let until_mode = match until.as_str() {
+                "free" => watch::WatchUntil::Free,
+                _ => watch::WatchUntil::Listen,
+            };
+            watch::run_watch(watch::WatchOptions {
+                ports,
+                until: until_mode,
+                interval_secs: interval,
+                timeout_secs: timeout,
+                quiet,
+                json,
+            })?
+        }
         Target::Tui => tui::run()?,
     }
     Ok(())
