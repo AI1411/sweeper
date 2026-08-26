@@ -162,3 +162,20 @@ fn invalid_port_like_token_treated_as_name() {
     let cli = Cli::parse_from(["sw", ":notaport"]);
     assert_eq!(cli.target, Target::Name(":notaport".into()));
 }
+
+#[test]
+fn subcommand_doctor() {
+    let cli = Cli::parse_from(["sw", "doctor"]);
+    assert_eq!(cli.target, Target::Sub(SubCommand::Doctor));
+}
+
+#[test]
+fn subcommand_completions() {
+    let cli = Cli::parse_from(["sw", "completions", "zsh"]);
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::Completions {
+            shell: "zsh".into()
+        })
+    );
+}

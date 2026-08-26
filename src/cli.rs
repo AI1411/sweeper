@@ -32,6 +32,10 @@ pub enum SubCommand {
         warn_above: Option<String>,
         leaks: bool,
     },
+    Completions {
+        shell: String,
+    },
+    Doctor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +51,7 @@ pub enum MemoryAction {
     long_about = "Sweeper (sw) — developer-focused process browser and safe killer.\n\n\
 Safety: default SIGTERM; SIGKILL only with --force or TUI K. Protected system daemons \
 cannot be killed. sw clean proposes leftovers — it never auto-kills.\n\n\
+Run `sw doctor` to diagnose setup issues (permissions, port lookup, config paths).\n\n\
 Examples:\n  \
 sw                  TUI browser\n  \
 sw node             find by name\n  \
@@ -132,6 +137,12 @@ enum RawSub {
         #[arg(long, global = true)]
         leaks: bool,
     },
+    /// Generate shell completion script (bash, zsh, fish)
+    Completions {
+        shell: String,
+    },
+    /// Diagnose common setup problems
+    Doctor,
 }
 
 #[derive(Debug, ClapSubcommand)]
@@ -220,6 +231,8 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
                 warn_above,
                 leaks,
             }),
+            RawSub::Completions { shell } => Target::Sub(SubCommand::Completions { shell }),
+            RawSub::Doctor => Target::Sub(SubCommand::Doctor),
         };
     }
 
