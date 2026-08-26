@@ -123,7 +123,7 @@ mod tests {
         let info = infer_workspace_package(app.to_str().unwrap()).unwrap();
         assert_eq!(info.display_name, "my-monorepo/apps/web");
         assert_eq!(
-            info.workspace_root,
+            info.workspace_root.canonicalize().unwrap_or_else(|_| root.to_path_buf()),
             root.canonicalize().unwrap_or_else(|_| root.to_path_buf())
         );
         assert_eq!(info.package_name.as_deref(), Some("apps/web"));
