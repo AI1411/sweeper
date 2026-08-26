@@ -280,7 +280,11 @@ mod which {
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false);
-        if found { Ok(()) } else { Err(()) }
+        if found {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }
 
