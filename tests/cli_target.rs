@@ -179,3 +179,33 @@ fn subcommand_completions() {
         })
     );
 }
+
+#[test]
+fn subcommand_watch_ports() {
+    let cli = Cli::parse_from(["sw", "watch", ":3000", ":3001"]);
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::Watch {
+            ports: vec![3000, 3001],
+            until: "listen".into(),
+            interval: 1.0,
+            timeout: None,
+            quiet: false,
+        })
+    );
+}
+
+#[test]
+fn subcommand_watch_free_flag() {
+    let cli = Cli::parse_from(["sw", "watch", ":3000", "--free"]);
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::Watch {
+            ports: vec![3000],
+            until: "free".into(),
+            interval: 1.0,
+            timeout: None,
+            quiet: false,
+        })
+    );
+}

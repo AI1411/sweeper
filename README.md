@@ -72,6 +72,9 @@ Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated).
 `sw project` recognizes monorepo workspaces (`pnpm-workspace.yaml`, npm `workspaces`, `turbo.json`, `nx.json`) and shows tmux/screen session labels when detected. Different git worktree paths appear as separate groups. Remote/nested tmux sessions may not resolve a session name.
 | `sw doctor` | — | Diagnose setup (permissions, port lookup, config paths) |
 | `sw completions <shell>` | — | Generate shell completions (`bash`, `zsh`, `fish`) |
+| `sw watch :<port>` | — | Poll until port is listening or free |
+
+`sw watch :3000` waits until a process listens on the port. Use `--free` or `--until free` to wait until the port is released. `--interval` defaults to 1s (minimum 0.5s). Distinct from `sw memory watch`.
 
 Examples:
 

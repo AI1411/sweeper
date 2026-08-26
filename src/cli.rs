@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand as ClapSubcommand};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Target {
     Tui,
     Name(String),
@@ -8,7 +8,7 @@ pub enum Target {
     Sub(SubCommand),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SubCommand {
     Ports,
     Top,
@@ -36,6 +36,13 @@ pub enum SubCommand {
         shell: String,
     },
     Doctor,
+    Watch {
+        ports: Vec<u16>,
+        until: String,
+        interval: f64,
+        timeout: Option<u64>,
+        quiet: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,7 +92,7 @@ pub struct CliArgs {
     raw_targets: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Cli {
     pub force: bool,
     pub tree: bool,
@@ -143,6 +150,27 @@ enum RawSub {
     },
     /// Diagnose common setup problems
     Doctor,
+    /// Poll until port(s) are listening or free
+    Watch {
+        /// Ports to watch (e.g. :3000 :3001)
+        #[arg(value_name = "PORT", required = true)]
+        ports: Vec<String>,
+        /// Wait until port is free (alias for --until free)
+        #[arg(long)]
+        free: bool,
+        /// Wait condition: listen or free
+        #[arg(long = "until", value_name = "MODE")]
+        until: Option<String>,
+        /// Poll interval in seconds (minimum 0.5)
+        #[arg(long, default_value_t = 1.0)]
+        interval: f64,
+        /// Exit with error after this many seconds
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// Only print the final line
+        #[arg(long)]
+        quiet: bool,
+    },
 }
 
 #[derive(Debug, ClapSubcommand)]
@@ -189,7 +217,13 @@ impl Cli {
                 _ => raw_targets.push(t),
             }
         }
-        let target = resolve_target(args.subcommand, raw_targets);
+        let target = match resolve_target(args.subcommand, raw_targets) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(2);
+            }
+        };
         Self {
             force,
             tree,
@@ -200,9 +234,9 @@ impl Cli {
     }
 }
 
-fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Target {
+fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Result<Target, String> {
     if let Some(sub) = subcommand {
-        return match sub {
+        return Ok(match sub {
             RawSub::Ports => Target::Sub(SubCommand::Ports),
             RawSub::Top => Target::Sub(SubCommand::Top),
             RawSub::Clean { exclude } => Target::Sub(SubCommand::Clean { exclude }),
@@ -233,11 +267,44 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
             }),
             RawSub::Completions { shell } => Target::Sub(SubCommand::Completions { shell }),
             RawSub::Doctor => Target::Sub(SubCommand::Doctor),
-        };
+            RawSub::Watch {
+                ports,
+                free,
+                until,
+                interval,
+                timeout,
+                quiet,
+            } => {
+                let parsed_ports = parse_watch_ports(ports)?;
+                let mode = if free {
+                    "free".to_string()
+                } else if let Some(u) = until {
+                    let u = u.to_ascii_lowercase();
+                    if u == "listen" || u == "listening" || u == "free" {
+                        if u == "listening" {
+                            "listen".to_string()
+                        } else {
+                            u
+                        }
+                    } else {
+                        return Err(format!("invalid --until value: {u} (use listen or free)"));
+                    }
+                } else {
+                    "listen".to_string()
+                };
+                Target::Sub(SubCommand::Watch {
+                    ports: parsed_ports,
+                    until: mode,
+                    interval,
+                    timeout,
+                    quiet,
+                })
+            }
+        });
     }
 
     if raw_targets.is_empty() {
-        return Target::Tui;
+        return Ok(Target::Tui);
     }
 
     let mut ports = Vec::new();
@@ -253,13 +320,28 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Targe
     }
 
     if !ports.is_empty() && names.is_empty() {
-        return Target::Ports(ports);
+        return Ok(Target::Ports(ports));
     }
     if ports.is_empty() && names.len() == 1 {
-        return Target::Name(names.remove(0));
+        return Ok(Target::Name(names.remove(0)));
     }
     // Mixed or multiple names: treat first as name (MVP)
-    Target::Name(names.into_iter().next().unwrap_or_default())
+    Ok(Target::Name(names.into_iter().next().unwrap_or_default()))
+}
+
+fn parse_watch_ports(tokens: Vec<String>) -> Result<Vec<u16>, String> {
+    if tokens.is_empty() {
+        return Err("watch requires at least one port (e.g. sw watch :3000)".into());
+    }
+    let mut ports = Vec::new();
+    for t in tokens {
+        let token = t.strip_prefix(':').unwrap_or(t.as_str());
+        match parse_port_token(token) {
+            Some(expanded) => ports.extend(expanded),
+            None => return Err(format!("invalid port token: {t}")),
+        }
+    }
+    Ok(ports)
 }
 
 /// Parse `:3000` or inclusive range `3000-3010`.
