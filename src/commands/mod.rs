@@ -1,8 +1,10 @@
 pub mod cache;
 pub mod clean;
+pub mod completions;
 pub mod confirm;
 pub mod disk;
 pub mod docker;
+pub mod doctor;
 pub mod history;
 pub mod memory;
 pub mod name;

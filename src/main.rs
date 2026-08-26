@@ -1,6 +1,7 @@
 use sweeper::cli::{Cli, SubCommand, Target};
 use sweeper::commands::{
-    cache, clean, disk, docker, history, memory, name, port, ports_list, project, top,
+    cache, clean, completions, disk, docker, doctor, history, memory, name, port, ports_list,
+    project, top,
 };
 use sweeper::json_output;
 use sweeper::memory::MemorySort;
@@ -44,6 +45,8 @@ fn main() -> anyhow::Result<()> {
             };
             memory::run_memory(action, sort_field, warn_above, leaks, dry_run, json)?
         }
+        Target::Sub(SubCommand::Completions { shell }) => completions::run_completions(&shell)?,
+        Target::Sub(SubCommand::Doctor) => doctor::run_doctor(json)?,
         Target::Tui => tui::run()?,
     }
     Ok(())

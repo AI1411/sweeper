@@ -68,6 +68,8 @@ sw project app  # inspect / kill a project
 Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated).
 | `sw history` | `h` | Kill history (`--last` for one entry) |
 | `sw project` | `proj` | List inferred projects; `sw project <name>` to kill |
+| `sw doctor` | — | Diagnose setup (permissions, port lookup, config paths) |
+| `sw completions <shell>` | — | Generate shell completions (`bash`, `zsh`, `fish`) |
 
 Examples:
 
@@ -158,6 +160,23 @@ my-critical-daemon
 ```
 
 One process name per line; `#` comments allowed. Protected names are matched case-insensitively against the process basename.
+
+## Shell completions
+
+```bash
+# bash
+sw completions bash > ~/.local/share/bash-completion/completions/sw
+
+# zsh
+sw completions zsh > "${fpath[1]}/_sw"
+
+# fish
+sw completions fish > ~/.config/fish/completions/sw.fish
+```
+
+## Troubleshooting
+
+Run `sw doctor` to check common setup issues: native vs `lsof` port lookup, history/protect config paths, and optional OrbStack/Docker CLIs. Use `sw doctor --json` for scripting. Exit code is non-zero when any hard check fails.
 
 ## Colors
 
