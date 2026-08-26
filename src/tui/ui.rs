@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use super::app::{App, ViewMode};
+use crate::clean::{confidence_level, format_age, format_reasons_display};
 use crate::project::summarize_group;
 
 const ACCENT: Color = Color::Cyan;
@@ -104,6 +105,11 @@ fn draw_table(frame: &mut Frame, app: &mut App, area: Rect) {
         return;
     }
 
+    if app.in_clean_list() {
+        draw_clean_table(frame, app, area);
+        return;
+    }
+
     let header = Row::new(vec!["", "PID", "PROCESS", "PORT", "CPU", "MEM"])
         .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
 
@@ -197,7 +203,7 @@ fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
                 Cell::from(g.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
                 Cell::from(g.path.clone()).style(Style::default().fg(MUTED)),
                 Cell::from(s.process_count.to_string()),
-                Cell::from(format!("{:.0} MB", mem_mb)).style(Style::default().fg(MEM)),
+                Cell::from(format!("{mem_mb:.0} MB")).style(Style::default().fg(MEM)),
                 Cell::from(ports).style(Style::default().fg(PORT)),
             ])
         })
@@ -227,6 +233,103 @@ fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
             .border_style(Style::default().fg(ACCENT))
             .title(Span::styled(
                 project_table_title(app),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            )),
+    );
+
+    frame.render_stateful_widget(table, area, &mut app.table_state);
+}
+
+fn confidence_style(level: &str) -> Style {
+    match level {
+        "high" => Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD),
+        "medium" => Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+        _ => Style::default().fg(MUTED),
+    }
+}
+
+fn draw_clean_table(frame: &mut Frame, app: &mut App, area: Rect) {
+    let header = Row::new(vec!["CONF", "PID", "PROCESS", "PORT", "AGE", "REASONS"])
+        .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
+
+    let rows: Vec<Row> = app
+        .visible_clean_candidates()
+        .iter()
+        .map(|c| {
+            let p = &c.process;
+            let conf = confidence_level(c);
+            let ports = if p.ports.is_empty() {
+                "-".to_string()
+            } else {
+                p.ports
+                    .iter()
+                    .map(|port| format!(":{port}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            let reasons = format_reasons_display(c)
+                .into_iter()
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(", ");
+            Row::new(vec![
+                Cell::from(conf.to_ascii_uppercase()).style(confidence_style(conf)),
+                Cell::from(p.pid.to_string()).style(Style::default().fg(MUTED)),
+                Cell::from(p.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
+                Cell::from(ports).style(Style::default().fg(PORT)),
+                Cell::from(format_age(p.run_time_secs)).style(Style::default().fg(MUTED)),
+                Cell::from(reasons).style(Style::default().fg(MUTED)),
+            ])
+        })
+        .collect();
+
+    let title = if app.clean_high_only {
+        format!(
+            " Clean leftovers (high only) [{} / {}] ",
+            app.cursor + 1,
+            app.clean_filtered.len().max(1)
+        )
+    } else {
+        format!(
+            " Clean leftovers [{} / {}] ",
+            if app.clean_filtered.is_empty() {
+                0
+            } else {
+                app.cursor + 1
+            },
+            app.clean_filtered.len()
+        )
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(8),
+            Constraint::Length(8),
+            Constraint::Length(14),
+            Constraint::Length(14),
+            Constraint::Length(8),
+            Constraint::Min(20),
+        ],
+    )
+    .header(header)
+    .highlight_symbol(">")
+    .row_highlight_style(
+        Style::default()
+            .bg(ACCENT)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD),
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(ACCENT))
+            .title(Span::styled(
+                title,
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             )),
     );
@@ -388,6 +491,16 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         ),
         Span::raw(" Projects  "),
         Span::styled(
+            "[c]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" Clean  "),
+        Span::styled(
+            "[H]",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" High-only  "),
+        Span::styled(
             "[o]",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
@@ -409,7 +522,9 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         Span::raw(" Quit"),
     ]);
     let status = if app.status.is_empty() {
-        if app.in_project_list() {
+        if app.in_clean_list() {
+            format!("{} clean candidates", app.clean_filtered.len())
+        } else if app.in_project_list() {
             format!("{} projects", app.visible_project_groups().len())
         } else {
             format!("{} processes", app.filtered.len())

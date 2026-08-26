@@ -61,6 +61,16 @@ pub fn rank(n: usize) -> String {
     paint(format!("{n}."), Style::new().dimmed())
 }
 
+pub fn confidence_badge(level: &str) -> String {
+    let upper = level.to_ascii_uppercase();
+    let style = match upper.as_str() {
+        "HIGH" => Style::new().green().bold(),
+        "MEDIUM" => Style::new().yellow().bold(),
+        _ => Style::new().dimmed(),
+    };
+    paint(format!("{upper:<6}"), style)
+}
+
 pub fn kill_outcome(outcome: KillOutcome) -> String {
     let text = format!("{outcome:?}");
     match outcome {

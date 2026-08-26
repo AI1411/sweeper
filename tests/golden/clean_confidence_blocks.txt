@@ -1,0 +1,6 @@
+  HIGH   node pid 48291 :3000 age 2h stack: vite
+         reasons: stack:vite, stale-server (2h on :3000)
+         cmd: ./node_modules/.bin/vite
+  MEDIUM bun pid 2201 :8787 age 45m stack: bun
+         reasons: stack:bun, idle-listener (45m, CPU 0.2%)
+         cmd: ./node_modules/.bin/vite

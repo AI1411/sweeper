@@ -5,6 +5,7 @@ pub mod ports;
 pub mod ports_native;
 pub mod protect;
 pub mod tree;
+pub mod tty;
 pub mod types;
 
 pub use types::ProcessInfo;

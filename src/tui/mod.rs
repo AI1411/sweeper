@@ -258,6 +258,8 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Char('p') => app.toggle_ports_only(),
         KeyCode::Char('e') => app.toggle_tree_view(),
         KeyCode::Char('P') => app.toggle_project_view(),
+        KeyCode::Char('c') => app.toggle_clean_view(),
+        KeyCode::Char('H') => app.toggle_clean_high_only(),
         KeyCode::Char('o') | KeyCode::Char('O') => app.toggle_resources_view(),
         KeyCode::Char('R') if app.resources_open => app.request_reclaim_confirm(),
         KeyCode::Char('C') if app.resources_open => {

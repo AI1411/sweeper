@@ -140,6 +140,7 @@ Launch with bare `sw`.
 - Critical system processes are protected from kill (OS-specific built-in list).
 - `sw clean` never auto-kills — it proposes; you decide.
 - `sw clean` skips active dev servers; it flags orphans, stale/idle listeners, and zombies.
+- `sw clean` sorts candidates by confidence (`high` → `medium` → `low`), then score. TUI: press `c` for clean view, `H` to filter high-confidence only.
 - There is no `-y` / `--yes` skip for confirmations.
 - After kills, Sweeper prints an **estimated** memory freed total from the pre-kill snapshot (not proof of OS reclaim).
 

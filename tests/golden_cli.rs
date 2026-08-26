@@ -1,5 +1,5 @@
-use sweeper::clean::{format_reasons_display, CleanCandidate, CleanSummary};
-use sweeper::commands::clean::format_summary_lines;
+use sweeper::clean::{confidence_level, format_reasons_display, CleanCandidate, CleanSummary};
+use sweeper::commands::clean::{format_candidate_block, format_summary_lines};
 use sweeper::commands::ports_list::format_ports_table;
 use sweeper::process::kill::KillOutcome;
 use sweeper::process::ProcessInfo;
@@ -34,6 +34,32 @@ fn fixture_proc() -> ProcessInfo {
         run_time_secs: 8040,
         is_zombie: false,
     }
+}
+
+#[test]
+fn golden_clean_confidence_sorted_blocks() {
+    setup_no_color();
+    let stale = CleanCandidate {
+        process: fixture_proc(),
+        reasons: vec!["stack:vite".into(), "stale-server".into()],
+    };
+    let mut idle = fixture_proc();
+    idle.pid = 2201;
+    idle.name = "bun".into();
+    idle.ports = vec![8787];
+    idle.run_time_secs = 45 * 60;
+    let idle = CleanCandidate {
+        process: idle,
+        reasons: vec!["stack:bun".into(), "idle-listener".into()],
+    };
+    assert_eq!(confidence_level(&stale), "high");
+    assert_eq!(confidence_level(&idle), "medium");
+    let actual = format!(
+        "{}{}",
+        format_candidate_block(&stale),
+        format_candidate_block(&idle)
+    );
+    golden_compare("clean_confidence_blocks", &actual);
 }
 
 #[test]

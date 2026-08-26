@@ -322,6 +322,30 @@ fn proposes_nested_worker_under_orphan_node() {
 }
 
 #[test]
+fn skips_young_listener_under_ide_parent() {
+    let procs = vec![
+        proc(10, 1, "Cursor Helper", 0.0, 3600, vec![], None),
+        proc(400, 10, "node", 0.0, 120, vec![3000], None),
+    ];
+    let listening = vec![(3000, 400)];
+    let out = propose_leftovers(&procs, &listening);
+    assert!(out.is_empty());
+}
+
+#[test]
+fn proposals_sorted_high_before_medium() {
+    let procs = vec![
+        proc(100, 50, "node", 0.0, STALE_SERVER_SECS, vec![3000], None),
+        proc(200, 50, "bun", 0.0, IDLE_LISTENER_SECS, vec![8787], None),
+    ];
+    let listening = vec![(3000, 100), (8787, 200)];
+    let out = propose_leftovers(&procs, &listening);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].process.pid, 100);
+    assert_eq!(out[1].process.pid, 200);
+}
+
+#[test]
 fn skips_postgres_and_redis_without_stale_signals() {
     let procs = vec![
         proc(905, 1, "postgres", 2.0, 3600, vec![5432], None),

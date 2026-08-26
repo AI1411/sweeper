@@ -137,7 +137,7 @@ fn kill_named(
             "  {}  {}  {}  {}",
             style::pid(format!("{:>6}", p.pid)),
             style::process_name(format!("{:<16}", p.name)),
-            style::port(format!("{:<12}", ports)),
+            style::port(format!("{ports:<12}")),
             style::mem(format!("{:.0} MB", p.memory_mb()))
         );
     }

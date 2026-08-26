@@ -47,7 +47,7 @@ fn inode_pid_map() -> Result<HashMap<u64, u32>> {
             continue;
         }
         let pid = pid.unwrap();
-        let fd_dir = format!("/proc/{}/fd", pid);
+        let fd_dir = format!("/proc/{pid}/fd");
         let fds = match fs::read_dir(&fd_dir) {
             Ok(fds) => fds,
             Err(_) => continue,
