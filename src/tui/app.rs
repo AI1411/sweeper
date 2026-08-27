@@ -58,6 +58,7 @@ pub struct App {
     pub show_help_overlay: bool,
     pub sort_mode: SortMode,
     snapshot: ProcessSnapshot,
+    pub dirty: bool,
 }
 
 impl App {
@@ -93,6 +94,7 @@ impl App {
             show_help_overlay: false,
             sort_mode: SortMode::Default,
             snapshot,
+            dirty: true,
         };
         app.refilter();
         app.apply_default_view_from_config();
@@ -117,6 +119,14 @@ impl App {
         }
     }
 
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    pub fn clear_dirty(&mut self) {
+        self.dirty = false;
+    }
+
     pub fn request_kill_confirm(&mut self, force: bool, tree: bool) {
         if self.pids_to_kill().is_empty() {
             self.status = "Nothing to kill".into();
@@ -125,6 +135,7 @@ impl App {
         }
         self.confirming_kill = Some(PendingKill { force, tree });
         self.status = format!("{} | Confirm kill? [y/N]", self.format_kill_preview(tree));
+        self.mark_dirty();
     }
 
     pub fn cancel_kill_confirm(&mut self) {
@@ -168,6 +179,7 @@ impl App {
 
     pub fn apply_resource_snapshot(&mut self, snapshot: ResourceSnapshot) {
         self.resource_snapshot = snapshot;
+        self.mark_dirty();
         if self.resources_open && !self.resource_snapshot.available {
             self.resources_open = false;
             self.status = "OrbStack/Docker not detected".into();
@@ -660,6 +672,7 @@ impl App {
             self.cursor = 0;
         }
         self.sync_table_state();
+        self.mark_dirty();
     }
 
     pub fn current_pid(&self) -> Option<u32> {
@@ -865,6 +878,7 @@ impl App {
             port_map.len(),
             with_ports
         );
+        self.mark_dirty();
     }
 
     pub fn refresh(&mut self) {
@@ -886,6 +900,7 @@ impl App {
         } else {
             self.refilter();
         }
+        self.mark_dirty();
     }
 
     pub fn should_auto_refresh_stats(&self) -> bool {
