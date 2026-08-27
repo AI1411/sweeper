@@ -2,7 +2,7 @@
 
 **Sweep unwanted processes away.**
 
-A developer-focused CLI/TUI for finding leftover processes and terminating them safely. Primary target is macOS; Linux is formally supported for CLI, TUI, ports, clean, and history.
+A developer-focused CLI/TUI for finding leftover processes and terminating them safely. Primary target is macOS; Linux is formally supported for CLI, TUI, ports, clean, history, and project. Resource commands (`memory`, `docker`, `disk`) work where Docker / OrbStack is available.
 
 Binary name: `sw`
 
@@ -15,9 +15,13 @@ Binary name: `sw`
 | `sw ports` / `sw top` | Yes | Yes |
 | `sw clean` / `sw history` | Yes | Yes |
 | `sw project` | Yes | Yes |
-| Native port lookup | libproc (lsof fallback) | `/proc/net/tcp` (lsof fallback) |
-| History file | `~/Library/Application Support/com.sweeper.sweeper/history.json` | `~/.local/share/com.sweeper.sweeper/history.json` (XDG) |
+| `sw watch` / `sw doctor` / completions | Yes | Yes |
+| `sw cache` | Yes | Yes |
+| `sw memory` / `sw docker` / `sw disk` | OrbStack / Docker | Docker when available |
+| Native port lookup | libproc (`lsof` fallback) | `/proc/net/tcp` (`lsof` fallback) |
+| History file | `~/Library/Application Support/com.sweeper.sweeper/history.json` | `~/.local/share/sweeper/history.json` (XDG) |
 | Protect config | `~/Library/Application Support/com.sweeper.sweeper/protect.toml` | `~/.config/sweeper/protect.toml` (XDG) |
+| User config | `~/Library/Application Support/com.sweeper.sweeper/config.toml` | `~/.config/sweeper/config.toml` (XDG) |
 | Built-in protect list | macOS system daemons | Linux system daemons (`systemd`, `sshd`, …) |
 
 ## Install
@@ -44,13 +48,17 @@ Man page source: [`docs/sw.1.md`](docs/sw.1.md) (install manually to your `MANPA
 sw              # open the TUI process browser
 sw node         # find processes by name
 sw :3000        # find whatever is listening on a port
+sw :3000 :3001  # multiple ports
+sw :3000-3010   # port range
 sw p            # list listening ports
 sw t            # show CPU / memory leaders
-sw c            # propose leftovers (you confirm each kill)
-sw h            # show kill history
-sw h --last     # show the most recent kill
+sw c            # propose leftovers (confirm each kill)
+sw h --last     # most recent kill
 sw project      # list inferred projects
 sw project app  # inspect / kill a project
+sw watch :3000  # wait until a port is listening
+sw m            # OrbStack / Docker memory overview
+sw doctor       # diagnose setup
 ```
 
 ## Commands
@@ -59,44 +67,38 @@ sw project app  # inspect / kill a project
 | --- | --- | --- |
 | `sw` | — | Interactive TUI process browser |
 | `sw <name>` | — | Fuzzy search by process name |
-| `sw :<port>` | — | Find process(es) by port (repeatable) |
+| `sw :<port>` | — | Find process(es) by port (repeatable; ranges like `:3000-3010` supported) |
 | `sw ports` | `p` | List LISTEN ports with process and PID |
-| `sw top` | `t` | Top processes by CPU and memory; interactive kill by rank or PID (`--json` for machine output) |
+| `sw top` | `t` | Top processes by CPU and memory; interactive kill by rank or PID |
 | `sw clean` | `c` | Propose leftover candidates; confirm before kill |
-
-`sw clean --exclude <pattern>` skips candidates whose name or PID contains the pattern (repeatable).  
-Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated) and `~/.config/sweeper/config.toml` (`clean.exclude`).
-| `sw history` | `h` | Kill history (`--last` for one entry) |
-| `sw project` | `proj` | List inferred projects; `sw project <name>` to kill |
-
-`sw project` recognizes monorepo workspaces (`pnpm-workspace.yaml`, npm `workspaces`, `turbo.json`, `nx.json`) and shows tmux/screen session labels when detected. Different git worktree paths appear as separate groups. Remote/nested tmux sessions may not resolve a session name.
+| `sw history` | `h` | Kill history (`--last`, `--project`, `--since`, `--limit`) |
+| `sw project` | `proj` | List inferred projects; `sw project <name>` to inspect / kill |
+| `sw memory` | `m` | OrbStack / Docker memory overview (`reclaim`, `watch` subcommands) |
+| `sw docker` | — | Combined Docker / OrbStack memory + disk overview |
+| `sw disk` | `d` | Docker disk usage (`--top N` to limit rows) |
+| `sw cache` | — | Scan common dev tool caches (npm, cargo, pnpm) |
+| `sw watch :<port>` | — | Poll until port is listening or free |
 | `sw doctor` | — | Diagnose setup (permissions, port lookup, config paths) |
 | `sw completions <shell>` | — | Generate shell completions (`bash`, `zsh`, `fish`) |
-| `sw watch :<port>` | — | Poll until port is listening or free |
 
-`sw watch :3000` waits until a process listens on the port. Use `--free` or `--until free` to wait until the port is released. `--interval` defaults to 1s (minimum 0.5s). Distinct from `sw memory watch`.
+### Command notes
 
-Examples:
+- **`sw clean`**: `--exclude <pattern>` skips candidates whose name or PID contains the pattern (repeatable). Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated) and the user `config.toml` (`clean.exclude`) — see platform paths above.
+- **`sw project`**: Recognizes monorepo workspaces (`pnpm-workspace.yaml`, npm `workspaces`, `turbo.json`, `nx.json`) and shows tmux/screen session labels when detected. Different git worktree paths appear as separate groups. Remote/nested tmux sessions may not resolve a session name.
+- **`sw memory`**: `sw memory reclaim` reclaims OrbStack VM memory (confirmation required). `sw memory watch` streams usage (`--interval`, `--containers`). Show mode supports `--sort`, `--warn-above`, and `--leaks`.
+- **`sw watch`**: `sw watch :3000` waits until a process listens. Use `--free` or `--until free` to wait until released. `--interval` defaults to 1s (minimum 0.5s). Distinct from `sw memory watch`.
 
-```bash
-sw node
-sw :3000 :3001
-sw :3000-3010
-sw ports
-sw top          # then enter rank (1-10), memory rank (m1-m10), or PID to kill
-sw clean
-sw history --last
-sw project
-sw project my-app
-```
+### Scripting with JSON
 
-Scripting with JSON:
+`--json` works on `ports`, `top`, `clean`, `project`, `history`, `memory`, `docker`, `disk`, and `cache`:
 
 ```bash
 sw ports --json | jq '.[] | select(.port == 3000)'
 sw clean --json | jq '.candidates[].pid'
 sw project --json | jq '.[].name'
 sw history --json | jq '.[-1].pid'
+sw memory --json | jq '.system'
+sw cache --json | jq '.entries[].name'
 ```
 
 ## Options
@@ -106,7 +108,7 @@ sw history --json | jq '.[-1].pid'
 | `--force` | Allow SIGKILL when a process does not exit after SIGTERM |
 | `--tree` | Also kill descendants (PPID tree), children first |
 | `--dry-run` | Show kill targets without sending signals |
-| `--json` | Machine-readable JSON output (`ports`, `clean`, `project`, `history`) |
+| `--json` | Machine-readable JSON output (disables colors) |
 | `-h`, `--help` | Print help |
 
 Flags may appear before or after targets:
@@ -119,11 +121,11 @@ sw node --tree
 
 ## TUI
 
-Launch with bare `sw`.
+Launch with bare `sw`. Press `?` for the in-app help overlay.
 
 | Key | Action |
 | --- | --- |
-| `↑` / `↓` | Move |
+| `↑` / `↓` / `j` | Move |
 | `g` / `G` | Jump to first / last row |
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl-u` / `Ctrl-d` | Page up / down |
@@ -138,8 +140,13 @@ Launch with bare `sw`.
 | `s` | Cycle sort order (default / CPU / memory / name / port) |
 | `P` | Toggle project grouping view |
 | `e` | Toggle process tree view |
+| `c` | Toggle clean (leftover) view |
+| `H` | Filter high-confidence clean candidates only |
+| `o` | Toggle OrbStack / Docker resources view |
+| `R` / `C` / `D` | In resources view: reclaim / containers / docker disk |
 | `i` / `Enter` | Toggle process detail panel (Enter expands project in project view) |
 | `r` | Refresh processes and ports |
+| `?` | Help overlay |
 | `q` | Quit |
 
 CPU and memory refresh automatically every 2 seconds in the process view (ports reload every 10s, or immediately with `r`). Override the interval with `SWEEPER_TUI_REFRESH_SECS` (e.g. `3`).
@@ -150,7 +157,7 @@ CPU and memory refresh automatically every 2 seconds in the process view (ports 
 - Critical system processes are protected from kill (OS-specific built-in list).
 - `sw clean` never auto-kills — it proposes; you decide.
 - `sw clean` skips active dev servers; it flags orphans, stale/idle listeners, and zombies.
-- `sw clean` sorts candidates by confidence (`high` → `medium` → `low`), then score. TUI: press `c` for clean view, `H` to filter high-confidence only.
+- `sw clean` sorts candidates by confidence (`high` → `medium` → `low`), then score.
 - There is no `-y` / `--yes` skip for confirmations.
 - After kills, Sweeper prints an **estimated** memory freed total from the pre-kill snapshot (not proof of OS reclaim).
 
