@@ -807,6 +807,11 @@ impl App {
     }
 
     pub fn refresh(&mut self) {
+        self.refresh_stats();
+    }
+
+    /// Refresh CPU, memory, and liveness without reloading listening ports.
+    pub fn refresh_stats(&mut self) {
         crate::process::list::refresh_process_list(&mut self.processes);
         self.selected
             .retain(|pid| self.processes.iter().any(|p| p.pid == *pid));
@@ -820,6 +825,15 @@ impl App {
         } else {
             self.refilter();
         }
+    }
+
+    pub fn should_auto_refresh_stats(&self) -> bool {
+        !self.resources_open
+            && self.view_mode == ViewMode::Processes
+            && !self.searching
+            && !self.is_confirming_kill()
+            && !self.is_confirming_reclaim()
+            && !self.show_help_overlay
     }
 }
 
@@ -1202,5 +1216,16 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("VM Memory")));
         app.set_resource_panel(ResourcePanel::Containers);
         assert!(app.resource_lines().iter().any(|l| l == "Containers"));
+    }
+
+    #[test]
+    fn should_auto_refresh_stats() {
+        let mut app = App::new(vec![proc(1, "node", vec![])]);
+        assert!(app.should_auto_refresh_stats());
+        app.searching = true;
+        assert!(!app.should_auto_refresh_stats());
+        app.searching = false;
+        app.request_kill_confirm(false, false);
+        assert!(!app.should_auto_refresh_stats());
     }
 }

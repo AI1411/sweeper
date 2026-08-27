@@ -141,6 +141,8 @@ Launch with bare `sw`.
 | `r` | Refresh processes and ports |
 | `q` | Quit |
 
+CPU and memory refresh automatically every 2 seconds in the process view (ports reload every 10s, or immediately with `r`). Override the interval with `SWEEPER_TUI_REFRESH_SECS` (e.g. `3`).
+
 ## Safety
 
 - Default signal is **SIGTERM**. **SIGKILL** only with `--force` or TUI `K`.
