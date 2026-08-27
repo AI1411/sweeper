@@ -2,6 +2,7 @@ pub mod cache;
 pub mod clean;
 pub mod cli;
 pub mod commands;
+pub mod config;
 pub mod disk;
 pub mod error;
 pub mod history;

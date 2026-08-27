@@ -108,11 +108,7 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 fn tui_data_refresh_secs() -> u64 {
-    std::env::var("SWEEPER_TUI_REFRESH_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or(2)
+    crate::config::effective_tui_refresh_secs()
 }
 
 fn spawn_resource_loader(tx: mpsc::Sender<Msg>) {

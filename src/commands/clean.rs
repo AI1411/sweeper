@@ -1,6 +1,6 @@
 use crate::clean::{
-    apply_excludes, confidence_level, excludes_from_env, format_age, format_command_snippet,
-    format_reasons_display, propose_leftovers, summarize, CleanSummary,
+    apply_excludes, confidence_level, format_age, format_command_snippet, format_reasons_display,
+    propose_leftovers, summarize, CleanSummary,
 };
 use crate::commands::confirm::confirm;
 use crate::disk::collect_docker_disk_report;
@@ -26,8 +26,7 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
     let ports = listening_ports().unwrap_or_default();
     merge_ports(&mut procs, &ports);
     let mut proposals = propose_leftovers(&procs, &ports);
-    let mut excludes = excludes_from_env();
-    excludes.extend(exclude.iter().cloned());
+    let excludes = crate::config::effective_clean_excludes(exclude);
     proposals = apply_excludes(proposals, &excludes);
 
     let summary = summarize(&proposals);

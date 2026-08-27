@@ -92,7 +92,17 @@ impl App {
             sort_mode: SortMode::Default,
         };
         app.refilter();
+        app.apply_default_view_from_config();
         app
+    }
+
+    fn apply_default_view_from_config(&mut self) {
+        if crate::config::effective_clean_high_only() {
+            self.clean_high_only = true;
+        }
+        if crate::config::effective_tui_default_view().as_deref() == Some("projects") {
+            self.toggle_project_view();
+        }
     }
 
     pub fn request_kill_confirm(&mut self, force: bool, tree: bool) {

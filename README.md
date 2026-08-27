@@ -65,7 +65,7 @@ sw project app  # inspect / kill a project
 | `sw clean` | `c` | Propose leftover candidates; confirm before kill |
 
 `sw clean --exclude <pattern>` skips candidates whose name or PID contains the pattern (repeatable).  
-Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated).
+Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated) and `~/.config/sweeper/config.toml` (`clean.exclude`).
 | `sw history` | `h` | Kill history (`--last` for one entry) |
 | `sw project` | `proj` | List inferred projects; `sw project <name>` to kill |
 
