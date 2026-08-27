@@ -48,7 +48,7 @@ fn handle_test_key(app: &mut App, key: KeyEvent) -> bool {
 
 #[test]
 fn g_and_g_jump_to_first_and_last_row() {
-    let mut app = App::new(vec![
+    let mut app = App::with_processes(vec![
         proc(1, "a", vec![]),
         proc(2, "b", vec![]),
         proc(3, "c", vec![]),
@@ -61,7 +61,7 @@ fn g_and_g_jump_to_first_and_last_row() {
 
 #[test]
 fn page_up_and_down_move_by_viewport() {
-    let mut app = App::new(vec![
+    let mut app = App::with_processes(vec![
         proc(1, "a", vec![]),
         proc(2, "b", vec![]),
         proc(3, "c", vec![]),
@@ -80,7 +80,7 @@ fn page_up_and_down_move_by_viewport() {
 
 #[test]
 fn search_key_refilters_visible_rows() {
-    let mut app = App::new(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
+    let mut app = App::with_processes(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
     handle_test_key(&mut app, press(KeyCode::Char('/')));
     assert!(app.searching);
     handle_test_key(&mut app, press(KeyCode::Char('n')));
@@ -96,7 +96,7 @@ fn search_key_refilters_visible_rows() {
 
 #[test]
 fn p_toggles_ports_only_filter() {
-    let mut app = App::new(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
+    let mut app = App::with_processes(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
     handle_test_key(&mut app, press(KeyCode::Char('p')));
     assert!(app.ports_only);
     assert_eq!(app.filtered.len(), 1);
@@ -107,7 +107,7 @@ fn p_toggles_ports_only_filter() {
 
 #[test]
 fn k_shows_kill_preview_in_status() {
-    let mut app = App::new(vec![ProcessInfo {
+    let mut app = App::with_processes(vec![ProcessInfo {
         pid: 4812,
         ppid: 1,
         name: "node".into(),
@@ -131,7 +131,7 @@ fn k_shows_kill_preview_in_status() {
 
 #[test]
 fn orbstack_key_opens_resources_when_available() {
-    let mut app = App::new(vec![]);
+    let mut app = App::with_processes(vec![]);
     app.resource_snapshot.available = true;
     handle_test_key(&mut app, press(KeyCode::Char('o')));
     assert!(app.resources_open);
@@ -141,7 +141,7 @@ fn orbstack_key_opens_resources_when_available() {
 
 #[test]
 fn question_mark_toggles_help_overlay() {
-    let mut app = App::new(vec![proc(1, "node", vec![])]);
+    let mut app = App::with_processes(vec![proc(1, "node", vec![])]);
     assert!(!app.show_help_overlay);
     handle_test_key(&mut app, press(KeyCode::Char('?')));
     assert!(app.show_help_overlay);
@@ -151,14 +151,14 @@ fn question_mark_toggles_help_overlay() {
 
 #[test]
 fn clean_view_is_accessible_from_processes() {
-    let mut app = App::new(vec![proc(1, "node", vec![])]);
+    let mut app = App::with_processes(vec![proc(1, "node", vec![])]);
     handle_test_key(&mut app, press(KeyCode::Char('c')));
     assert!(app.in_clean_list());
 }
 
 #[test]
 fn draw_smoke_test_backend_layout() {
-    let mut app = App::new(vec![
+    let mut app = App::with_processes(vec![
         proc(1, "node", vec![3000]),
         proc(2, "vite", vec![5173]),
     ]);

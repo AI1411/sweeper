@@ -4,44 +4,104 @@ use sysinfo::{ProcessStatus, ProcessesToUpdate, System};
 
 use super::types::ProcessInfo;
 
-pub fn list_processes() -> Vec<ProcessInfo> {
-    let mut sys = System::new_all();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
+/// Reusable sysinfo session for incremental TUI refresh.
+pub struct ProcessSnapshot {
+    sys: System,
+}
 
-    let mut out = Vec::new();
-    for (pid, proc_) in sys.processes() {
-        let name = proc_.name().to_string_lossy().into_owned();
-        let cmd = {
-            let args: Vec<String> = proc_
-                .cmd()
-                .iter()
-                .map(|s| s.to_string_lossy().into_owned())
-                .collect();
-            if args.is_empty() {
-                None
-            } else {
-                Some(args.join(" "))
-            }
-        };
-        let cwd = proc_.cwd().map(|p| p.to_string_lossy().into_owned());
-
-        let is_zombie = matches!(proc_.status(), ProcessStatus::Zombie);
-        out.push(ProcessInfo {
-            pid: pid.as_u32(),
-            ppid: proc_.parent().map(|p| p.as_u32()).unwrap_or(0),
-            name,
-            cpu: proc_.cpu_usage(),
-            memory_bytes: proc_.memory(),
-            ports: Vec::new(),
-            command: cmd,
-            cwd,
-            run_time_secs: proc_.run_time(),
-            is_zombie,
-        });
+impl ProcessSnapshot {
+    pub fn new() -> Self {
+        let mut sys = System::new_all();
+        sys.refresh_processes(ProcessesToUpdate::All, true);
+        Self { sys }
     }
-    out.sort_by_key(|a| a.name.to_lowercase());
-    sort_processes_for_display(&mut out);
-    out
+
+    pub fn list_processes(&mut self) -> Vec<ProcessInfo> {
+        self.sys.refresh_processes(ProcessesToUpdate::All, true);
+        let mut out = collect_processes(&self.sys);
+        out.sort_by_key(|a| a.name.to_lowercase());
+        sort_processes_for_display(&mut out);
+        out
+    }
+
+    pub fn refresh_process_list(&mut self, procs: &mut Vec<ProcessInfo>) {
+        self.sys.refresh_processes(ProcessesToUpdate::All, true);
+        reconcile_process_list(procs, &self.sys);
+    }
+}
+
+impl Default for ProcessSnapshot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn process_info_from_sys(pid: sysinfo::Pid, proc_: &sysinfo::Process) -> ProcessInfo {
+    let name = proc_.name().to_string_lossy().into_owned();
+    let command = {
+        let args: Vec<String> = proc_
+            .cmd()
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        if args.is_empty() {
+            None
+        } else {
+            Some(args.join(" "))
+        }
+    };
+    ProcessInfo {
+        pid: pid.as_u32(),
+        ppid: proc_.parent().map(|p| p.as_u32()).unwrap_or(0),
+        name,
+        cpu: proc_.cpu_usage(),
+        memory_bytes: proc_.memory(),
+        ports: Vec::new(),
+        command,
+        cwd: proc_.cwd().map(|p| p.to_string_lossy().into_owned()),
+        run_time_secs: proc_.run_time(),
+        is_zombie: matches!(proc_.status(), ProcessStatus::Zombie),
+    }
+}
+
+fn collect_processes(sys: &System) -> Vec<ProcessInfo> {
+    sys.processes()
+        .iter()
+        .map(|(pid, proc_)| process_info_from_sys(*pid, proc_))
+        .collect()
+}
+
+fn reconcile_process_list(procs: &mut Vec<ProcessInfo>, sys: &System) {
+    let mut fresh_map: HashMap<u32, ProcessInfo> = HashMap::new();
+    for (pid, proc_) in sys.processes() {
+        fresh_map.insert(pid.as_u32(), process_info_from_sys(*pid, proc_));
+    }
+
+    for p in procs.iter_mut() {
+        if let Some(fresh) = fresh_map.get(&p.pid) {
+            p.ppid = fresh.ppid;
+            p.name.clone_from(&fresh.name);
+            p.cpu = fresh.cpu;
+            p.memory_bytes = fresh.memory_bytes;
+            p.command.clone_from(&fresh.command);
+            p.cwd.clone_from(&fresh.cwd);
+            p.run_time_secs = fresh.run_time_secs;
+            p.is_zombie = fresh.is_zombie;
+        }
+    }
+
+    let alive: HashSet<u32> = fresh_map.keys().copied().collect();
+    let existing: HashSet<u32> = procs.iter().map(|p| p.pid).collect();
+    for (pid, fresh) in fresh_map {
+        if !existing.contains(&pid) {
+            procs.push(fresh);
+        }
+    }
+    procs.retain(|p| alive.contains(&p.pid));
+}
+
+pub fn list_processes() -> Vec<ProcessInfo> {
+    ProcessSnapshot::new().list_processes()
 }
 
 /// Developer-centric ordering: listeners first, then memory, CPU, name.
@@ -127,61 +187,7 @@ pub fn compare_processes(a: &ProcessInfo, b: &ProcessInfo, mode: SortMode) -> st
 
 /// Refresh CPU, memory, and liveness for an existing snapshot; add new PIDs and drop exited ones.
 pub fn refresh_process_list(procs: &mut Vec<ProcessInfo>) {
-    let mut sys = System::new_all();
-    sys.refresh_processes(ProcessesToUpdate::All, true);
-
-    let mut fresh_map: HashMap<u32, ProcessInfo> = HashMap::new();
-    for (pid, proc_) in sys.processes() {
-        let pid_u32 = pid.as_u32();
-        fresh_map.insert(
-            pid_u32,
-            ProcessInfo {
-                pid: pid_u32,
-                ppid: proc_.parent().map(|p| p.as_u32()).unwrap_or(0),
-                name: proc_.name().to_string_lossy().into_owned(),
-                cpu: proc_.cpu_usage(),
-                memory_bytes: proc_.memory(),
-                ports: Vec::new(),
-                command: {
-                    let args: Vec<String> = proc_
-                        .cmd()
-                        .iter()
-                        .map(|s| s.to_string_lossy().into_owned())
-                        .collect();
-                    if args.is_empty() {
-                        None
-                    } else {
-                        Some(args.join(" "))
-                    }
-                },
-                cwd: proc_.cwd().map(|p| p.to_string_lossy().into_owned()),
-                run_time_secs: proc_.run_time(),
-                is_zombie: matches!(proc_.status(), ProcessStatus::Zombie),
-            },
-        );
-    }
-
-    for p in procs.iter_mut() {
-        if let Some(fresh) = fresh_map.get(&p.pid) {
-            p.ppid = fresh.ppid;
-            p.name.clone_from(&fresh.name);
-            p.cpu = fresh.cpu;
-            p.memory_bytes = fresh.memory_bytes;
-            p.command.clone_from(&fresh.command);
-            p.cwd.clone_from(&fresh.cwd);
-            p.run_time_secs = fresh.run_time_secs;
-            p.is_zombie = fresh.is_zombie;
-        }
-    }
-
-    let alive: HashSet<u32> = fresh_map.keys().copied().collect();
-    let existing: HashSet<u32> = procs.iter().map(|p| p.pid).collect();
-    for (pid, fresh) in fresh_map {
-        if !existing.contains(&pid) {
-            procs.push(fresh);
-        }
-    }
-    procs.retain(|p| alive.contains(&p.pid));
+    ProcessSnapshot::new().refresh_process_list(procs);
 }
 
 /// Score a query against process name and command. Higher is better; 0 means no match.
@@ -483,6 +489,18 @@ mod tests {
         ];
         sort_processes_for_display(&mut procs);
         assert_eq!(procs[0].pid, 2);
+    }
+
+    #[test]
+    fn process_snapshot_reuses_system_for_refresh() {
+        let mut snap = ProcessSnapshot::new();
+        let mut procs = snap.list_processes();
+        if procs.is_empty() {
+            return;
+        }
+        let pid = procs[0].pid;
+        snap.refresh_process_list(&mut procs);
+        assert!(procs.iter().any(|p| p.pid == pid));
     }
 
     #[test]
