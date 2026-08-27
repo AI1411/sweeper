@@ -363,13 +363,15 @@ pub struct CacheEntryJson {
 pub struct CacheJson {
     pub entries: Vec<CacheEntryJson>,
     pub total_bytes: u64,
+    pub scan_duration_ms: u64,
 }
 
 impl CacheJson {
-    pub fn from_entries(entries: &[crate::cache::CacheEntry]) -> Self {
-        let total_bytes = entries.iter().map(|e| e.size_bytes).sum();
+    pub fn from_scan(scan: &crate::cache::CacheScanResult) -> Self {
+        let total_bytes = scan.entries.iter().map(|e| e.size_bytes).sum();
         Self {
-            entries: entries
+            entries: scan
+                .entries
                 .iter()
                 .map(|e| CacheEntryJson {
                     name: e.name.clone(),
@@ -379,6 +381,14 @@ impl CacheJson {
                 })
                 .collect(),
             total_bytes,
+            scan_duration_ms: scan.scan_duration_ms,
         }
+    }
+
+    pub fn from_entries(entries: &[crate::cache::CacheEntry]) -> Self {
+        Self::from_scan(&crate::cache::CacheScanResult {
+            entries: entries.to_vec(),
+            scan_duration_ms: 0,
+        })
     }
 }
