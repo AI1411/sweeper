@@ -1,4 +1,4 @@
-use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::json_output::{emit_json, ProjectJson};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
@@ -205,12 +205,13 @@ fn kill_named(
         } else {
             KillSignal::Term
         };
-        let _ = append_entry(HistoryEntry::new(
+        let _ = append_entry(entry_for_process(
             p.pid,
             &p.name,
             p.ports.clone(),
             signal,
             format!("{outcome:?}"),
+            Some(p),
         ));
         println!(
             "{} {} {}: {}",

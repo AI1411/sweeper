@@ -46,7 +46,15 @@ fn subcommand_top() {
 #[test]
 fn subcommand_history_last() {
     let cli = Cli::parse_from(["sw", "history", "--last"]);
-    assert_eq!(cli.target, Target::Sub(SubCommand::History { last: true }));
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::History {
+            last: true,
+            project: None,
+            since: None,
+            limit: None,
+        })
+    );
 }
 
 #[test]
@@ -86,7 +94,15 @@ fn clean_exclude_flag() {
 #[test]
 fn short_alias_history_last() {
     let cli = Cli::parse_from(["sw", "h", "--last"]);
-    assert_eq!(cli.target, Target::Sub(SubCommand::History { last: true }));
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::History {
+            last: true,
+            project: None,
+            since: None,
+            limit: None,
+        })
+    );
 }
 
 #[test]
@@ -148,7 +164,15 @@ fn subcommand_clean() {
 #[test]
 fn subcommand_history_default() {
     let cli = Cli::parse_from(["sw", "history"]);
-    assert_eq!(cli.target, Target::Sub(SubCommand::History { last: false }));
+    assert_eq!(
+        cli.target,
+        Target::Sub(SubCommand::History {
+            last: false,
+            project: None,
+            since: None,
+            limit: None,
+        })
+    );
 }
 
 #[test]

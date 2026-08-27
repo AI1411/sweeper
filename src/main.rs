@@ -24,7 +24,18 @@ fn main() -> anyhow::Result<()> {
         Target::Sub(SubCommand::Clean { exclude }) => {
             clean::run_clean(force, &exclude, dry_run, json)?
         }
-        Target::Sub(SubCommand::History { last }) => history::run_history(last, json)?,
+        Target::Sub(SubCommand::History {
+            last,
+            project,
+            since,
+            limit,
+        }) => history::run_history(history::HistoryOptions {
+            last,
+            project,
+            since,
+            limit,
+            json,
+        })?,
         Target::Sub(SubCommand::Project { name }) => {
             project::run_project(name, force, dry_run, json)?
         }

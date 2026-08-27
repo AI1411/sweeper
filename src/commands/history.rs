@@ -1,14 +1,28 @@
-use crate::history::{last_entry, load_entries};
+use crate::history::{filter_entries, load_entries, parse_since_duration, HistoryEntry};
 use crate::json_output::{emit_json, HistoryJson};
 use crate::style;
 
-pub fn run_history(last: bool, json: bool) -> anyhow::Result<()> {
-    if json {
-        let entries = if last {
-            last_entry()?.map(|e| vec![e]).unwrap_or_default()
-        } else {
-            load_entries()?
+pub struct HistoryOptions {
+    pub last: bool,
+    pub project: Option<String>,
+    pub since: Option<String>,
+    pub limit: Option<usize>,
+    pub json: bool,
+}
+
+pub fn run_history(opts: HistoryOptions) -> anyhow::Result<()> {
+    let since_secs =
+        match opts.since.as_deref() {
+            None => None,
+            Some(s) => Some(parse_since_duration(s).ok_or_else(|| {
+                anyhow::anyhow!("invalid --since duration (use e.g. 1h, 30m, 2d)")
+            })?),
         };
+
+    let limit = if opts.last { Some(1) } else { opts.limit };
+    let entries = filter_entries(load_entries()?, opts.project.as_deref(), since_secs, limit);
+
+    if opts.json {
         let rows: Vec<HistoryJson> = entries
             .into_iter()
             .map(|e| HistoryJson {
@@ -18,40 +32,36 @@ pub fn run_history(last: bool, json: bool) -> anyhow::Result<()> {
                 ports: e.ports,
                 signal: format!("{:?}", e.signal).to_lowercase(),
                 result: e.result,
+                project: e.project,
             })
             .collect();
         return emit_json(&rows);
     }
-    if last {
-        match last_entry()? {
-            Some(e) => println!(
-                "{}  {}  {} {}  {} {:?}",
-                style::dim(&e.time),
-                style::process_name(&e.name),
-                style::dim("PID"),
-                style::pid(e.pid),
-                style::dim("ports"),
-                e.ports
-            ),
-            None => println!("{}", style::warn("No history yet.")),
-        }
-        return Ok(());
-    }
-    let entries = load_entries()?;
+
     if entries.is_empty() {
         println!("{}", style::warn("No history yet."));
         return Ok(());
     }
     for e in entries {
-        println!(
-            "{}  {}  {} {}  {} {:?}",
-            style::dim(&e.time),
-            style::process_name(&e.name),
-            style::dim("PID"),
-            style::pid(e.pid),
-            style::dim("ports"),
-            e.ports
-        );
+        print_entry(&e);
     }
     Ok(())
+}
+
+fn print_entry(e: &HistoryEntry) {
+    let project = e
+        .project
+        .as_deref()
+        .map(|p| format!("  project:{p}"))
+        .unwrap_or_default();
+    println!(
+        "{}  {}  {} {}  {} {:?}{}",
+        style::dim(&e.time),
+        style::process_name(&e.name),
+        style::dim("PID"),
+        style::pid(e.pid),
+        style::dim("ports"),
+        e.ports,
+        style::dim(project)
+    );
 }
