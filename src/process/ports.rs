@@ -164,8 +164,15 @@ pub fn pids_for_ports(ports: &[u16]) -> Result<HashMap<u16, Vec<u32>>> {
 }
 
 pub fn merge_ports(procs: &mut [ProcessInfo], port_map: &[(u16, u32)]) {
+    if port_map.is_empty() {
+        return;
+    }
+    let mut by_pid: HashMap<u32, &mut ProcessInfo> = HashMap::with_capacity(procs.len());
+    for proc in procs.iter_mut() {
+        by_pid.insert(proc.pid, proc);
+    }
     for (port, pid) in port_map {
-        if let Some(p) = procs.iter_mut().find(|p| p.pid == *pid) {
+        if let Some(p) = by_pid.get_mut(pid) {
             if !p.ports.contains(port) {
                 p.ports.push(*port);
             }
