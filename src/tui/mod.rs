@@ -63,17 +63,27 @@ pub fn run() -> anyhow::Result<()> {
             }
         }
 
-        terminal.draw(|frame| ui::draw(frame, &mut app))?;
+        if app.dirty {
+            terminal.draw(|frame| ui::draw(frame, &mut app))?;
+            app.clear_dirty();
+        }
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
+            match event::read()? {
+                Event::Key(key) => {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+                    app.mark_dirty();
+                    if handle_key(&mut app, key, &tx, &mut terminal)? {
+                        break Ok(());
+                    }
                 }
-                if handle_key(&mut app, key, &tx, &mut terminal)? {
-                    break Ok(());
+                Event::Resize(_, _) => {
+                    app.mark_dirty();
                 }
+                _ => {}
             }
         }
 
