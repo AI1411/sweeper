@@ -2,7 +2,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table},
     Frame,
 };
 
@@ -41,6 +41,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         draw_footer(frame, app, chunks[3]);
     } else {
         draw_footer(frame, app, chunks[2]);
+    }
+    if app.show_help_overlay {
+        draw_help_overlay(frame);
     }
 }
 
@@ -442,93 +445,7 @@ fn draw_detail(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
-    let help = Line::from(vec![
-        Span::styled(
-            "[↑↓]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Move  "),
-        Span::styled(
-            "[g/G]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Jump  "),
-        Span::styled(
-            "[PgUp/PgDn]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Page  "),
-        Span::styled(
-            "[Space]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Select  "),
-        Span::styled(
-            "[k]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Kill→y  "),
-        Span::styled(
-            "[K]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Force  "),
-        Span::styled(
-            "[t]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Tree  "),
-        Span::styled(
-            "[T]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Force tree  "),
-        Span::styled(
-            "[p]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Ports  "),
-        Span::styled(
-            "[e]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Tree view  "),
-        Span::styled(
-            "[P]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Projects  "),
-        Span::styled(
-            "[c]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Clean  "),
-        Span::styled(
-            "[H]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" High-only  "),
-        Span::styled(
-            "[o]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" OrbStack  "),
-        Span::styled(
-            "[i]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Detail  "),
-        Span::styled(
-            "[/]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Search  "),
-        Span::styled(
-            "[q]",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(" Quit"),
-    ]);
+    let help = context_help_line(app);
     let status = if app.status.is_empty() {
         if app.in_clean_list() {
             format!("{} clean candidates", app.clean_filtered.len())
@@ -551,4 +468,111 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
             .title(Span::styled(" Help ", Style::default().fg(MUTED))),
     );
     frame.render_widget(widget, area);
+}
+
+fn context_help_line(app: &App) -> Line<'static> {
+    if app.resources_open {
+        return help_spans(&[
+            ("[↑↓]", "Move"),
+            ("[R]", "Reclaim"),
+            ("[C]", "Containers"),
+            ("[D]", "Docker"),
+            ("[Esc]", "Back"),
+            ("[?]", "All keys"),
+        ]);
+    }
+    if app.searching {
+        return help_spans(&[("[Enter/Esc]", "Done"), ("[Backspace]", "Delete")]);
+    }
+    if app.in_clean_list() {
+        return help_spans(&[
+            ("[↑↓]", "Move"),
+            ("[Space]", "Select"),
+            ("[k/K]", "Kill→y"),
+            ("[H]", "High-only"),
+            ("[c]", "Back"),
+            ("[?]", "All keys"),
+        ]);
+    }
+    if app.in_project_list() {
+        return help_spans(&[
+            ("[↑↓]", "Move"),
+            ("[Enter]", "Expand"),
+            ("[k/K]", "Kill→y"),
+            ("[P]", "Back"),
+            ("[?]", "All keys"),
+        ]);
+    }
+    help_spans(&[
+        ("[↑↓]", "Move"),
+        ("[Space]", "Select"),
+        ("[k/K]", "Kill→y"),
+        ("[p]", "Ports"),
+        ("[P]", "Projects"),
+        ("[c]", "Clean"),
+        ("[/]", "Search"),
+        ("[?]", "All keys"),
+        ("[q]", "Quit"),
+    ])
+}
+
+fn help_spans(pairs: &[(&str, &str)]) -> Line<'static> {
+    let text = pairs
+        .iter()
+        .map(|(key, label)| format!("[{key}] {label}"))
+        .collect::<Vec<_>>()
+        .join("  ");
+    Line::from(text)
+}
+
+fn draw_help_overlay(frame: &mut Frame) {
+    let area = centered_rect(60, 70, frame.area());
+    let lines = vec![
+        Line::from(Span::styled(
+            "All keybindings",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from("Navigation: ↑↓ j  g/G first/last  PgUp/PgDn  Ctrl-u/d"),
+        Line::from("Selection:  Space toggle  / search"),
+        Line::from("Kill:       k SIGTERM→y  K SIGKILL  t tree  T force tree"),
+        Line::from("Views:      p ports-only  e tree view  P projects  c clean"),
+        Line::from("            H high-confidence clean  o OrbStack  i detail"),
+        Line::from("OrbStack:   R reclaim  C containers  D docker disk"),
+        Line::from("Other:      r refresh  ? this help  Esc back  q quit"),
+        Line::from(""),
+        Line::from(Span::styled(
+            "Press ? or Esc to close",
+            Style::default().fg(MUTED),
+        )),
+    ];
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Paragraph::new(lines).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(ACCENT))
+                .title(" Help "),
+        ),
+        area,
+    );
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }

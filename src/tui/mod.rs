@@ -202,6 +202,16 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
         return false;
     }
 
+    if app.show_help_overlay {
+        match code {
+            KeyCode::Char('?') | KeyCode::Esc => {
+                app.show_help_overlay = false;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match code {
             KeyCode::Char('u') | KeyCode::Char('U') => {
@@ -243,6 +253,9 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Char('i') => app.toggle_detail(),
         KeyCode::Char('/') => {
             app.searching = true;
+        }
+        KeyCode::Char('?') => {
+            app.show_help_overlay = true;
         }
         KeyCode::Up => app.move_up(),
         KeyCode::Down | KeyCode::Char('j') => app.move_down(),
