@@ -4,7 +4,7 @@ use ratatui::widgets::TableState;
 
 use crate::clean::{confidence_level, propose_leftovers, CleanCandidate};
 use crate::memory::{format_bytes, format_estimate};
-use crate::process::list::SortMode;
+use crate::process::list::{ProcessSnapshot, SortMode};
 use crate::process::tree::{layout_tree_rows, TreeRow};
 use crate::process::ProcessInfo;
 use crate::project::{group_projects, summarize_group, ProjectGroup};
@@ -57,10 +57,12 @@ pub struct App {
     pub confirming_reclaim: bool,
     pub show_help_overlay: bool,
     pub sort_mode: SortMode,
+    snapshot: ProcessSnapshot,
 }
 
 impl App {
-    pub fn new(processes: Vec<ProcessInfo>) -> Self {
+    pub fn new(mut snapshot: ProcessSnapshot) -> Self {
+        let processes = snapshot.list_processes();
         let mut app = Self {
             processes,
             filtered: Vec::new(),
@@ -90,7 +92,17 @@ impl App {
             confirming_reclaim: false,
             show_help_overlay: false,
             sort_mode: SortMode::Default,
+            snapshot,
         };
+        app.refilter();
+        app.apply_default_view_from_config();
+        app
+    }
+
+    /// Build an app view from a fixed process list (tests and previews).
+    pub fn with_processes(processes: Vec<ProcessInfo>) -> Self {
+        let mut app = Self::new(ProcessSnapshot::new());
+        app.processes = processes;
         app.refilter();
         app.apply_default_view_from_config();
         app
@@ -861,7 +873,7 @@ impl App {
 
     /// Refresh CPU, memory, and liveness without reloading listening ports.
     pub fn refresh_stats(&mut self) {
-        crate::process::list::refresh_process_list(&mut self.processes);
+        self.snapshot.refresh_process_list(&mut self.processes);
         self.selected
             .retain(|pid| self.processes.iter().any(|p| p.pid == *pid));
         if !self.last_ports.is_empty() {
@@ -907,7 +919,8 @@ mod tests {
 
     #[test]
     fn search_matches_port_number() {
-        let mut app = App::new(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
+        let mut app =
+            App::with_processes(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
         app.query = "3000".into();
         app.refilter();
         assert_eq!(app.filtered.len(), 1);
@@ -916,7 +929,7 @@ mod tests {
 
     #[test]
     fn search_matches_colon_port() {
-        let mut app = App::new(vec![proc(1, "node", vec![5173])]);
+        let mut app = App::with_processes(vec![proc(1, "node", vec![5173])]);
         app.query = ":5173".into();
         app.refilter();
         assert_eq!(app.filtered.len(), 1);
@@ -924,7 +937,8 @@ mod tests {
 
     #[test]
     fn ports_only_filter() {
-        let mut app = App::new(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
+        let mut app =
+            App::with_processes(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
         app.toggle_ports_only();
         assert!(app.ports_only);
         assert_eq!(app.filtered.len(), 1);
@@ -933,7 +947,7 @@ mod tests {
 
     #[test]
     fn table_state_follows_cursor() {
-        let mut app = App::new(vec![
+        let mut app = App::with_processes(vec![
             proc(1, "a", vec![]),
             proc(2, "b", vec![]),
             proc(3, "c", vec![]),
@@ -952,7 +966,7 @@ mod tests {
 
     #[test]
     fn refilter_clears_table_selection_when_empty() {
-        let mut app = App::new(vec![proc(1, "node", vec![3000])]);
+        let mut app = App::with_processes(vec![proc(1, "node", vec![3000])]);
         app.query = "nomatch".into();
         app.refilter();
         assert!(app.filtered.is_empty());
@@ -961,7 +975,7 @@ mod tests {
 
     #[test]
     fn move_first_and_last() {
-        let mut app = App::new(vec![
+        let mut app = App::with_processes(vec![
             proc(1, "a", vec![]),
             proc(2, "b", vec![]),
             proc(3, "c", vec![]),
@@ -974,7 +988,7 @@ mod tests {
 
     #[test]
     fn move_page_down_caps_at_end() {
-        let mut app = App::new(vec![
+        let mut app = App::with_processes(vec![
             proc(1, "a", vec![]),
             proc(2, "b", vec![]),
             proc(3, "c", vec![]),
@@ -989,7 +1003,7 @@ mod tests {
 
     #[test]
     fn kill_preview_single_process() {
-        let mut app = App::new(vec![ProcessInfo {
+        let mut app = App::with_processes(vec![ProcessInfo {
             pid: 4812,
             ppid: 1,
             name: "node".into(),
@@ -1010,7 +1024,7 @@ mod tests {
 
     #[test]
     fn kill_preview_multi_select() {
-        let mut app = App::new(vec![proc(1, "a", vec![]), proc(2, "b", vec![])]);
+        let mut app = App::with_processes(vec![proc(1, "a", vec![]), proc(2, "b", vec![])]);
         app.selected.insert(1);
         app.selected.insert(2);
         let preview = app.format_kill_preview(true);
@@ -1020,7 +1034,7 @@ mod tests {
 
     #[test]
     fn request_kill_confirm_sets_pending() {
-        let mut app = App::new(vec![proc(1, "node", vec![3000])]);
+        let mut app = App::with_processes(vec![proc(1, "node", vec![3000])]);
         app.request_kill_confirm(false, true);
         assert!(app.is_confirming_kill());
         assert_eq!(
@@ -1035,7 +1049,7 @@ mod tests {
 
     #[test]
     fn request_kill_confirm_empty_clears_pending() {
-        let mut app = App::new(vec![]);
+        let mut app = App::with_processes(vec![]);
         app.request_kill_confirm(false, false);
         assert!(!app.is_confirming_kill());
         assert_eq!(app.status, "Nothing to kill");
@@ -1043,7 +1057,7 @@ mod tests {
 
     #[test]
     fn cancel_kill_confirm_clears_pending() {
-        let mut app = App::new(vec![proc(1, "a", vec![])]);
+        let mut app = App::with_processes(vec![proc(1, "a", vec![])]);
         app.request_kill_confirm(true, false);
         app.cancel_kill_confirm();
         assert!(!app.is_confirming_kill());
@@ -1052,7 +1066,7 @@ mod tests {
 
     #[test]
     fn take_pending_kill_consumes_state() {
-        let mut app = App::new(vec![proc(1, "a", vec![])]);
+        let mut app = App::with_processes(vec![proc(1, "a", vec![])]);
         app.request_kill_confirm(true, true);
         let pending = app.take_pending_kill();
         assert_eq!(
@@ -1067,7 +1081,7 @@ mod tests {
 
     #[test]
     fn detail_panel_lines() {
-        let mut app = App::new(vec![ProcessInfo {
+        let mut app = App::with_processes(vec![ProcessInfo {
             pid: 4812,
             ppid: 4701,
             name: "node".into(),
@@ -1116,7 +1130,7 @@ mod tests {
                 is_zombie: false,
             },
         ];
-        let app = App::new(procs);
+        let app = App::with_processes(procs);
         // node listener sorts first under default sort mode
         let lines = app.format_process_detail();
         assert!(lines.iter().any(|l| l.contains("zsh → bun → node")));
@@ -1124,13 +1138,13 @@ mod tests {
 
     #[test]
     fn toggle_detail_requires_selection() {
-        let mut app = App::new(vec![]);
+        let mut app = App::with_processes(vec![]);
         app.toggle_detail();
         assert!(!app.show_detail);
     }
     #[test]
     fn project_view_toggle() {
-        let mut app = App::new(vec![ProcessInfo {
+        let mut app = App::with_processes(vec![ProcessInfo {
             pid: 1,
             ppid: 1,
             name: "node".into(),
@@ -1149,7 +1163,7 @@ mod tests {
 
     #[test]
     fn project_expand_lists_members() {
-        let mut app = App::new(vec![
+        let mut app = App::with_processes(vec![
             ProcessInfo {
                 pid: 1,
                 ppid: 1,
@@ -1182,7 +1196,7 @@ mod tests {
 
     #[test]
     fn project_kill_preview_whole_group() {
-        let mut app = App::new(vec![ProcessInfo {
+        let mut app = App::with_processes(vec![ProcessInfo {
             pid: 1,
             ppid: 1,
             name: "node".into(),
@@ -1240,7 +1254,7 @@ mod tests {
                 is_zombie: false,
             },
         ];
-        let mut app = App::new(procs);
+        let mut app = App::with_processes(procs);
         app.toggle_tree_view();
         assert!(app.tree_view);
         assert_eq!(app.tree_rows.len(), 3);
@@ -1250,7 +1264,7 @@ mod tests {
 
     #[test]
     fn resources_view_with_snapshot() {
-        let mut app = App::new(vec![]);
+        let mut app = App::with_processes(vec![]);
         app.resource_snapshot = ResourceSnapshot {
             available: true,
             orbstack_vm_bytes: Some(18_400_000_000),
@@ -1268,7 +1282,7 @@ mod tests {
 
     #[test]
     fn toggle_sort_mode_cycles_and_updates_status() {
-        let mut app = App::new(vec![
+        let mut app = App::with_processes(vec![
             proc(1, "zebra", vec![8080]),
             proc(2, "alpha", vec![3000]),
         ]);
@@ -1281,7 +1295,7 @@ mod tests {
 
     #[test]
     fn should_auto_refresh_stats() {
-        let mut app = App::new(vec![proc(1, "node", vec![])]);
+        let mut app = App::with_processes(vec![proc(1, "node", vec![])]);
         assert!(app.should_auto_refresh_stats());
         app.searching = true;
         assert!(!app.should_auto_refresh_stats());

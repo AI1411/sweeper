@@ -20,7 +20,7 @@ use ratatui::Terminal;
 
 use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
-use crate::process::list::list_processes;
+use crate::process::list::ProcessSnapshot;
 use crate::process::ports::listening_ports_cached;
 use crate::process::tree::collect_tree_pids;
 use crate::tui::app::ViewMode;
@@ -37,8 +37,8 @@ pub fn run() -> anyhow::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let processes = list_processes();
-    let mut app = App::new(processes);
+    let snapshot = ProcessSnapshot::new();
+    let mut app = App::new(snapshot);
 
     let (tx, rx) = mpsc::channel();
     spawn_port_loader(tx.clone());
