@@ -297,6 +297,7 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
             app.request_kill_confirm(force, tree);
         }
         KeyCode::Char('p') => app.toggle_ports_only(),
+        KeyCode::Char('s') => app.toggle_sort_mode(),
         KeyCode::Char('e') => app.toggle_tree_view(),
         KeyCode::Char('P') => app.toggle_project_view(),
         KeyCode::Char('c') => app.toggle_clean_view(),
