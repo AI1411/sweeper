@@ -184,25 +184,123 @@ pub fn refresh_process_list(procs: &mut Vec<ProcessInfo>) {
     procs.retain(|p| alive.contains(&p.pid));
 }
 
+/// Score a query against process name and command. Higher is better; 0 means no match.
+pub fn score_name_match(query: &str, name: &str, command: Option<&str>) -> u32 {
+    if query.is_empty() {
+        return 1;
+    }
+    let q = query.to_lowercase();
+    let n = name.to_lowercase();
+    if n == q {
+        return 1000;
+    }
+    if n.starts_with(&q) {
+        return 800;
+    }
+    if n.contains(&q) {
+        return 600;
+    }
+    if subsequence_match(&q, &n) {
+        return 300;
+    }
+    if let Some(cmd) = command {
+        let c = cmd.to_lowercase();
+        if c.contains(&q) {
+            return 400;
+        }
+        if subsequence_match(&q, &c) {
+            return 200;
+        }
+    }
+    0
+}
+
+fn subsequence_match(query: &str, text: &str) -> bool {
+    let mut qi = query.chars();
+    let mut next = qi.next();
+    for ch in text.chars() {
+        if Some(ch) == next {
+            next = qi.next();
+            if next.is_none() {
+                return true;
+            }
+        }
+    }
+    next.is_none()
+}
+
 /// Case-insensitive substring match against process name or command line.
 pub fn name_matches(query: &str, name: &str, command: Option<&str>) -> bool {
-    let q = query.to_lowercase();
-    name.to_lowercase().contains(&q)
-        || command
-            .map(|c| c.to_lowercase().contains(&q))
-            .unwrap_or(false)
+    score_name_match(query, name, command) > 0
 }
 
 pub fn find_by_name_fuzzy(query: &str) -> Vec<ProcessInfo> {
-    list_processes()
+    let mut matches: Vec<(u32, ProcessInfo)> = list_processes()
         .into_iter()
-        .filter(|p| name_matches(query, &p.name, p.command.as_deref()))
-        .collect()
+        .filter_map(|p| {
+            let score = score_name_match(query, &p.name, p.command.as_deref());
+            (score > 0).then_some((score, p))
+        })
+        .collect();
+    matches.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| a.1.name.to_lowercase().cmp(&b.1.name.to_lowercase()))
+            .then_with(|| a.1.pid.cmp(&b.1.pid))
+    });
+    matches.into_iter().map(|(_, p)| p).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn score_exact_name_beats_prefix() {
+        assert!(score_name_match("node", "node", None) > score_name_match("node", "nodejs", None));
+    }
+
+    #[test]
+    fn score_prefix_beats_substring() {
+        assert!(score_name_match("nod", "node", None) > score_name_match("nod", "bin/node", None));
+    }
+
+    #[test]
+    fn score_command_match_is_lowest() {
+        assert!(score_name_match("vite", "node", Some("vite dev")) > 0);
+        assert!(
+            score_name_match("vite", "node", Some("vite dev"))
+                < score_name_match("vite", "vite", None)
+        );
+    }
+
+    #[test]
+    fn score_empty_query_matches_all() {
+        assert_eq!(score_name_match("", "anything", None), 1);
+    }
+
+    #[test]
+    fn score_is_case_insensitive() {
+        assert_eq!(
+            score_name_match("NODE", "node", None),
+            score_name_match("node", "node", None)
+        );
+    }
+
+    #[test]
+    fn fuzzy_subsequence_matches_next_server() {
+        assert!(score_name_match("nxt", "next-server", None) > 0);
+        assert!(
+            score_name_match("nxt", "next-server", None) > score_name_match("nxt", "nginx", None)
+        );
+    }
+
+    #[test]
+    fn fuzzy_search_sorts_by_score() {
+        assert!(score_name_match("node", "node", None) > score_name_match("node", "nodejs", None));
+        assert!(
+            score_name_match("nxt", "next-server", None) > score_name_match("nxt", "nginx", None)
+        );
+    }
 
     #[test]
     fn name_matches_process_name() {

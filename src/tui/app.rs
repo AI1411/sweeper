@@ -594,29 +594,35 @@ impl App {
         }
         let q = self.query.to_lowercase();
         let q_port = q.trim_start_matches(':');
-        self.filtered = self
+        let mut scored: Vec<(u32, usize)> = self
             .processes
             .iter()
             .enumerate()
-            .filter(|(_, p)| {
+            .filter_map(|(i, p)| {
                 if self.ports_only && p.ports.is_empty() {
-                    return false;
+                    return None;
                 }
-                if q.is_empty() {
-                    return true;
-                }
-                p.name.to_lowercase().contains(&q)
-                    || p.ports.iter().any(|port| {
+                let mut score =
+                    crate::process::list::score_name_match(&q, &p.name, p.command.as_deref());
+                if !q.is_empty() {
+                    for port in &p.ports {
                         let s = port.to_string();
-                        s.contains(q_port) || format!(":{port}").contains(&q)
-                    })
-                    || p.command
-                        .as_ref()
-                        .map(|c| c.to_lowercase().contains(&q))
-                        .unwrap_or(false)
+                        if s.contains(q_port) || format!(":{port}").contains(&q) {
+                            score = score.max(700);
+                        }
+                    }
+                }
+                if q.is_empty() || score > 0 {
+                    Some((score, i))
+                } else {
+                    None
+                }
             })
-            .map(|(i, _)| i)
             .collect();
+        if !q.is_empty() {
+            scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        }
+        self.filtered = scored.into_iter().map(|(_, i)| i).collect();
         self.apply_sort_to_filtered();
         if self.cursor >= self.filtered.len() && !self.filtered.is_empty() {
             self.cursor = self.filtered.len() - 1;
