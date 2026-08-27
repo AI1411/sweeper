@@ -4,7 +4,7 @@ use crate::clean::{
 };
 use crate::commands::confirm::confirm;
 use crate::disk::collect_docker_disk_report;
-use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::json_output::{
     emit_json, CleanCandidateJson, CleanJson, CleanOrbstackReclaimJson, CleanSummaryJson,
     ReclaimEstimateJson, ReclaimResultJson,
@@ -82,12 +82,13 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
         } else {
             KillSignal::Term
         };
-        let _ = append_entry(HistoryEntry::new(
+        let _ = append_entry(entry_for_process(
             p.pid,
             &p.name,
             p.ports.clone(),
             signal,
             format!("{outcome:?}"),
+            Some(p),
         ));
         println!(
             "{} {} {}: {}",

@@ -18,7 +18,7 @@ use crossterm::terminal::{
 use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 
-use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::listening_ports_cached;
@@ -311,12 +311,13 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         } else {
             KillSignal::Term
         };
-        let _ = append_entry(HistoryEntry::new(
+        let _ = append_entry(entry_for_process(
             pid,
             &name,
             ports.clone(),
             signal,
             format!("{outcome:?}"),
+            info,
         ));
         let result = crate::report::KillResult::new(mem, ports, outcome);
         if result.is_success() {

@@ -17,6 +17,9 @@ pub enum SubCommand {
     },
     History {
         last: bool,
+        project: Option<String>,
+        since: Option<String>,
+        limit: Option<usize>,
     },
     Project {
         name: Option<String>,
@@ -117,6 +120,15 @@ enum RawSub {
     History {
         #[arg(long)]
         last: bool,
+        /// Filter by process or project name substring
+        #[arg(long, value_name = "NAME")]
+        project: Option<String>,
+        /// Only entries within this duration (e.g. 1h, 30m, 2d)
+        #[arg(long, value_name = "DURATION")]
+        since: Option<String>,
+        /// Show only the last N entries
+        #[arg(long, value_name = "N")]
+        limit: Option<usize>,
     },
     #[command(visible_alias = "proj")]
     Project {
@@ -240,7 +252,17 @@ fn resolve_target(subcommand: Option<RawSub>, raw_targets: Vec<String>) -> Resul
             RawSub::Ports => Target::Sub(SubCommand::Ports),
             RawSub::Top => Target::Sub(SubCommand::Top),
             RawSub::Clean { exclude } => Target::Sub(SubCommand::Clean { exclude }),
-            RawSub::History { last } => Target::Sub(SubCommand::History { last }),
+            RawSub::History {
+                last,
+                project,
+                since,
+                limit,
+            } => Target::Sub(SubCommand::History {
+                last,
+                project,
+                since,
+                limit,
+            }),
             RawSub::Project { name } => Target::Sub(SubCommand::Project { name }),
             RawSub::Disk { top } => Target::Sub(SubCommand::Disk { top }),
             RawSub::Cache => Target::Sub(SubCommand::Cache),

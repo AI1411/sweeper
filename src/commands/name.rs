@@ -1,4 +1,4 @@
-use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::{find_by_name_fuzzy, list_processes};
 use crate::process::plan::{plan_kills, print_dry_run};
@@ -102,12 +102,13 @@ fn kill_one(p: &ProcessInfo, force: bool) -> anyhow::Result<KillOutcome> {
     } else {
         KillSignal::Term
     };
-    let _ = append_entry(HistoryEntry::new(
+    let _ = append_entry(entry_for_process(
         p.pid,
         &p.name,
         p.ports.clone(),
         signal,
         format!("{outcome:?}"),
+        Some(p),
     ));
     println!(
         "{} {} {}: {}",

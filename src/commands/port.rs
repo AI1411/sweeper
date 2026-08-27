@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
@@ -158,12 +158,14 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool, dry_run: bool) -> anyho
         } else {
             KillSignal::Term
         };
-        let _ = append_entry(HistoryEntry::new(
+        let info = procs.iter().find(|p| p.pid == pid);
+        let _ = append_entry(entry_for_process(
             pid,
             name,
             ports_rec.clone(),
             signal,
             format!("{outcome:?}"),
+            info,
         ));
         println!(
             "{} {} {}: {}",

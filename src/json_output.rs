@@ -80,6 +80,8 @@ pub struct HistoryJson {
     pub ports: Vec<u16>,
     pub signal: String,
     pub result: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

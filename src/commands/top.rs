@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use crate::history::{append_entry, HistoryEntry, KillSignal};
+use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::tree::collect_tree_pids;
@@ -165,12 +165,13 @@ fn kill_one(p: &ProcessInfo, force: bool) -> anyhow::Result<KillOutcome> {
     } else {
         KillSignal::Term
     };
-    let _ = append_entry(HistoryEntry::new(
+    let _ = append_entry(entry_for_process(
         p.pid,
         &p.name,
         p.ports.clone(),
         signal,
         format!("{outcome:?}"),
+        Some(p),
     ));
     println!(
         "{} {} {}: {}",
