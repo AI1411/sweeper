@@ -10,6 +10,53 @@ pub fn emit_json<T: Serialize>(value: &T) -> anyhow::Result<()> {
 }
 
 #[derive(Debug, Serialize)]
+pub struct TopLeaderJson {
+    pub rank: usize,
+    pub pid: u32,
+    pub name: String,
+    pub cpu: f32,
+    pub memory_bytes: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TopJson {
+    pub cpu: Vec<TopLeaderJson>,
+    pub memory: Vec<TopLeaderJson>,
+}
+
+impl TopJson {
+    pub fn from_leaders(
+        cpu: &[crate::process::ProcessInfo],
+        memory: &[crate::process::ProcessInfo],
+    ) -> Self {
+        Self {
+            cpu: cpu
+                .iter()
+                .enumerate()
+                .map(|(i, p)| TopLeaderJson {
+                    rank: i + 1,
+                    pid: p.pid,
+                    name: p.name.clone(),
+                    cpu: p.cpu,
+                    memory_bytes: p.memory_bytes,
+                })
+                .collect(),
+            memory: memory
+                .iter()
+                .enumerate()
+                .map(|(i, p)| TopLeaderJson {
+                    rank: i + 1,
+                    pid: p.pid,
+                    name: p.name.clone(),
+                    cpu: p.cpu,
+                    memory_bytes: p.memory_bytes,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
 pub struct PortRow {
     pub port: u16,
     pub pid: u32,
