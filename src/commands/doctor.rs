@@ -79,6 +79,7 @@ pub fn collect_checks() -> Vec<DiagnosticCheck> {
         check_lsof(),
         check_history_path(),
         check_protect_config(),
+        check_user_config(),
         check_orb_cli(),
         check_docker_cli(),
         check_tty_color(),
@@ -167,6 +168,30 @@ fn check_protect_config() -> DiagnosticCheck {
         };
     }
     path_access_check("protect config readable", &path, false)
+}
+
+fn check_user_config() -> DiagnosticCheck {
+    let loaded = crate::config::load_config();
+    let display = display_path(&loaded.path);
+    if let Some(err) = &loaded.parse_error {
+        DiagnosticCheck {
+            name: "user config".into(),
+            status: CheckStatus::Warn,
+            message: format!("{display} invalid: {err}"),
+        }
+    } else if loaded.path.exists() {
+        DiagnosticCheck {
+            name: "user config".into(),
+            status: CheckStatus::Pass,
+            message: display,
+        }
+    } else {
+        DiagnosticCheck {
+            name: "user config".into(),
+            status: CheckStatus::Pass,
+            message: format!("{display} (optional file not present)"),
+        }
+    }
 }
 
 fn path_access_check(name: &str, path: &Path, needs_write: bool) -> DiagnosticCheck {
@@ -309,7 +334,7 @@ mod tests {
         let checks = collect_checks();
         assert!(checks.len() >= 7);
         assert!(checks.iter().any(|c| c.name == "sw binary"));
-        assert!(checks.iter().any(|c| c.name == "native port lookup"));
+        assert!(checks.iter().any(|c| c.name == "user config"));
     }
 
     #[test]
