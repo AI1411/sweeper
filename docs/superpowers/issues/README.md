@@ -122,3 +122,39 @@ Suggested order:
 3. **UX:** 48, 51
 4. **Monitoring:** 52 → 53
 5. **Integration:** 54, 55
+
+## Improvement backlog (2026-08 review)
+
+Created from codebase review. Files `56–70`; GitHub #137–#151.
+
+| File | GitHub | Title | Priority |
+|---|---|---|---|
+| 56 | #137 | `[Clean]` CLI batch confirm for `sw clean` | high |
+| 57 | #138 | `[Project]` Git branch, docker-compose, dev-script detection | medium |
+| 58 | #139 | `[History]` Project metadata, filters, quick re-watch | low |
+| 59 | #140 | `[UX]` TUI context-sensitive help footer | high |
+| 60 | #141 | `[UX]` TUI auto-refresh CPU/MEM on interval | high |
+| 61 | #142 | `[UX]` TUI sort toggle | medium |
+| 62 | #143 | `[UX]` Fuzzy search scoring | medium |
+| 63 | #144 | `[Config]` User config file (`config.toml`) | medium |
+| 64 | #145 | `[Feature]` Extend `--json` to `sw top` | low |
+| 65 | #146 | `[Performance]` Reuse sysinfo `System` for TUI refresh | high |
+| 66 | #147 | `[Performance]` Batch port lookup via LISTEN cache | medium |
+| 67 | #148 | `[Performance]` HashMap-based `merge_ports` | medium |
+| 68 | #149 | `[Performance]` TUI conditional redraw | medium |
+| 69 | #150 | `[Performance]` Parallel SIGTERM wait for batch kills | low |
+| 70 | #151 | `[Performance]` Faster `sw cache` dir size scan | low |
+
+Suggested order:
+
+1. **High impact UX:** 59, 60, 56
+2. **Performance:** 65, 66, 67, 68
+3. **Polish:** 61, 62, 63, 57, 58, 64, 69, 70
+
+Already covered by earlier closed issues (no new issue needed):
+
+- Orphan detection → #79 (implemented)
+- Memory leak detection → #114 (implemented)
+- Default sort → #76 (implemented)
+- Port cache TTL → #75 (implemented)
+- Multi-port batch confirm → #15 (implemented in `src/commands/port.rs`)
