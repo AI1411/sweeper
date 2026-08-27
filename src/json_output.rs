@@ -64,6 +64,12 @@ pub struct ProjectJson {
     pub package_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub git_branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compose_project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dev_script: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -3,9 +3,11 @@ use std::path::Path;
 
 use crate::process::ProcessInfo;
 
+pub mod metadata;
 pub mod session;
 pub mod workspace;
 
+use metadata::{enrich_project_path, infer_dev_script};
 use session::infer_session_label;
 use workspace::infer_workspace_package;
 
@@ -17,6 +19,9 @@ pub struct ProjectGroup {
     pub session_label: Option<String>,
     pub workspace_root: Option<String>,
     pub package_name: Option<String>,
+    pub git_branch: Option<String>,
+    pub compose_project: Option<String>,
+    pub dev_script: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -188,13 +193,19 @@ pub fn group_projects(procs: &[ProcessInfo]) -> Vec<ProjectGroup> {
         };
         let meta = infer_project_metadata(p);
         let session = infer_session_label(p, &by_pid);
-        let entry = map.entry(path.clone()).or_insert_with(|| ProjectGroup {
-            name: name.clone(),
-            path: path.clone(),
-            processes: Vec::new(),
-            session_label: session.clone(),
-            workspace_root: meta.workspace_root.clone(),
-            package_name: meta.package_name.clone(),
+        let entry = map.entry(path.clone()).or_insert_with(|| {
+            let (git_branch, compose_project) = enrich_project_path(&path);
+            ProjectGroup {
+                name: name.clone(),
+                path: path.clone(),
+                processes: Vec::new(),
+                session_label: session.clone(),
+                workspace_root: meta.workspace_root.clone(),
+                package_name: meta.package_name.clone(),
+                git_branch,
+                compose_project,
+                dev_script: None,
+            }
         });
         if entry.session_label.is_none() {
             entry.session_label = session;
@@ -205,11 +216,20 @@ pub fn group_projects(procs: &[ProcessInfo]) -> Vec<ProjectGroup> {
         if entry.package_name.is_none() {
             entry.package_name = meta.package_name;
         }
+        entry.merge_dev_script(p.command.as_deref());
         entry.processes.push(p.clone());
     }
     let mut groups: Vec<_> = map.into_values().collect();
     groups.sort_by_key(|a| a.name.to_lowercase());
     groups
+}
+
+impl ProjectGroup {
+    fn merge_dev_script(&mut self, command: Option<&str>) {
+        if self.dev_script.is_none() {
+            self.dev_script = infer_dev_script(command);
+        }
+    }
 }
 
 pub fn find_projects_by_name<'a>(groups: &'a [ProjectGroup], query: &str) -> Vec<&'a ProjectGroup> {
@@ -309,6 +329,9 @@ mod tests {
             session_label: None,
             workspace_root: None,
             package_name: None,
+            git_branch: None,
+            compose_project: None,
+            dev_script: None,
         };
         let s = summarize_group(&group);
         assert_eq!(s.process_count, 2);
