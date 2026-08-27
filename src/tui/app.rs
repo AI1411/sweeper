@@ -54,6 +54,7 @@ pub struct App {
     pub resource_panel: ResourcePanel,
     pub resource_snapshot: ResourceSnapshot,
     pub confirming_reclaim: bool,
+    pub show_help_overlay: bool,
 }
 
 impl App {
@@ -85,6 +86,7 @@ impl App {
             resource_panel: ResourcePanel::default(),
             resource_snapshot: ResourceSnapshot::unavailable(),
             confirming_reclaim: false,
+            show_help_overlay: false,
         };
         app.refilter();
         app

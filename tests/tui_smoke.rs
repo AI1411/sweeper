@@ -140,6 +140,23 @@ fn orbstack_key_opens_resources_when_available() {
 }
 
 #[test]
+fn question_mark_toggles_help_overlay() {
+    let mut app = App::new(vec![proc(1, "node", vec![])]);
+    assert!(!app.show_help_overlay);
+    handle_test_key(&mut app, press(KeyCode::Char('?')));
+    assert!(app.show_help_overlay);
+    handle_test_key(&mut app, press(KeyCode::Esc));
+    assert!(!app.show_help_overlay);
+}
+
+#[test]
+fn clean_view_is_accessible_from_processes() {
+    let mut app = App::new(vec![proc(1, "node", vec![])]);
+    handle_test_key(&mut app, press(KeyCode::Char('c')));
+    assert!(app.in_clean_list());
+}
+
+#[test]
 fn draw_smoke_test_backend_layout() {
     let mut app = App::new(vec![
         proc(1, "node", vec![3000]),
