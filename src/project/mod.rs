@@ -119,6 +119,11 @@ fn from_path(path: &str) -> Option<(String, String)> {
 }
 
 fn is_systemish_path(path: &str) -> bool {
+    // macOS per-user temp lives under /var/folders; TempDir and tools use it.
+    // Treat it as user space so project inference still works in tests and temp cwds.
+    if path.starts_with("/var/folders/") {
+        return false;
+    }
     let prefixes = [
         "/bin",
         "/sbin",
@@ -301,6 +306,21 @@ mod tests {
         assert!(infer_project(&p).is_none());
         let p = proc(3, "snap", Some("/snap/firefox/current"), None);
         assert!(infer_project(&p).is_none());
+        let p = proc(4, "node", Some("/var/log/my-app"), None);
+        assert!(infer_project(&p).is_none());
+    }
+
+    #[test]
+    fn allows_macos_var_folders_temp_cwd() {
+        let p = proc(
+            1,
+            "node",
+            Some("/var/folders/xx/yyyy/T/sweeper-proj-abc/my-app"),
+            None,
+        );
+        let (name, path) = infer_project(&p).unwrap();
+        assert_eq!(name, "my-app");
+        assert_eq!(path, "/var/folders/xx/yyyy/T/sweeper-proj-abc/my-app");
     }
 
     #[test]

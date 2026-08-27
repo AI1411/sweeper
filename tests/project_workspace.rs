@@ -77,14 +77,16 @@ fn tmux_session_label_on_group() {
 #[test]
 fn project_group_includes_git_branch_and_dev_script() {
     let tmp = TempDir::new().unwrap();
-    let root = tmp.path();
+    // Use an explicit project directory name so basename-based inference is stable
+    // even when the TempDir itself sits under macOS /var/folders.
+    let root = tmp.path().join("my-app");
     fs::create_dir_all(root.join(".git")).unwrap();
     fs::write(root.join(".git/HEAD"), "ref: refs/heads/feature-x\n").unwrap();
-    let procs = vec![proc(1, 10, "node", Some(root.to_str().unwrap()))];
-    let mut procs = procs;
+    let mut procs = vec![proc(1, 10, "node", Some(root.to_str().unwrap()))];
     procs[0].command = Some("pnpm dev".into());
     let groups = group_projects(&procs);
     assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].name, "my-app");
     assert_eq!(groups[0].git_branch.as_deref(), Some("feature-x"));
     assert_eq!(groups[0].dev_script.as_deref(), Some("pnpm dev"));
 }
