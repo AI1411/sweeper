@@ -19,7 +19,7 @@ use ratatui::prelude::CrosstermBackend;
 use ratatui::Terminal;
 
 use crate::history::{append_entry, entry_for_process, KillSignal};
-use crate::process::kill::{kill_pid, KillOutcome};
+use crate::process::kill::{kill_pids_batch, KillOutcome};
 use crate::process::list::ProcessSnapshot;
 use crate::process::ports::listening_ports_cached;
 use crate::process::tree::collect_tree_pids;
@@ -345,15 +345,27 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         roots
     };
 
+    let targets: Vec<(u32, String)> = pids
+        .iter()
+        .map(|pid| {
+            let info = app.processes.iter().find(|p| p.pid == *pid);
+            let name = info.map(|p| p.name.clone()).unwrap_or_else(|| "?".into());
+            (*pid, name)
+        })
+        .collect();
+    let target_refs: Vec<(u32, &str)> = targets
+        .iter()
+        .map(|(pid, name)| (*pid, name.as_str()))
+        .collect();
+    let outcomes = kill_pids_batch(&target_refs, force)?;
+
     let mut killed = 0;
     let mut results = Vec::new();
-    for pid in pids {
+    for ((pid, name), (_, outcome)) in targets.into_iter().zip(outcomes) {
         let info = app.processes.iter().find(|p| p.pid == pid);
-        let name = info.map(|p| p.name.clone()).unwrap_or_else(|| "?".into());
         let ports = info.map(|p| p.ports.clone()).unwrap_or_default();
         let mem = info.map(|p| p.memory_bytes).unwrap_or(0);
 
-        let outcome = kill_pid(pid, &name, force)?;
         let signal = if force && matches!(outcome, KillOutcome::ForceKilled) {
             KillSignal::Kill
         } else {
@@ -371,7 +383,6 @@ fn kill_selection(app: &mut App, force: bool, tree: bool) -> anyhow::Result<()> 
         if result.is_success() {
             killed += 1;
         }
-        app.status = format!("{name} ({pid}): {:?}", result.outcome);
         results.push(result);
     }
 
