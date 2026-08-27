@@ -23,6 +23,7 @@ use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::ports::listening_ports_cached;
 use crate::process::tree::collect_tree_pids;
+use crate::tui::app::ViewMode;
 
 enum Msg {
     Ports(Vec<(u16, u32)>),
@@ -45,6 +46,10 @@ pub fn run() -> anyhow::Result<()> {
 
     let tick_rate = Duration::from_millis(250);
     let mut last_tick = Instant::now();
+    let data_refresh_rate = Duration::from_secs(tui_data_refresh_secs());
+    let port_refresh_rate = Duration::from_secs(10);
+    let mut last_data_refresh = Instant::now();
+    let mut last_port_refresh = Instant::now();
 
     let result = loop {
         while let Ok(msg) = rx.try_recv() {
@@ -76,6 +81,21 @@ pub fn run() -> anyhow::Result<()> {
             last_tick = Instant::now();
         }
 
+        if app.should_auto_refresh_stats() && last_data_refresh.elapsed() >= data_refresh_rate {
+            last_data_refresh = Instant::now();
+            app.refresh_stats();
+        }
+
+        if app.view_mode == ViewMode::Processes
+            && !app.resources_open
+            && !app.is_confirming_kill()
+            && !app.is_confirming_reclaim()
+            && last_port_refresh.elapsed() >= port_refresh_rate
+        {
+            last_port_refresh = Instant::now();
+            spawn_port_loader(tx.clone());
+        }
+
         if app.should_quit {
             break Ok(());
         }
@@ -85,6 +105,14 @@ pub fn run() -> anyhow::Result<()> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     result
+}
+
+fn tui_data_refresh_secs() -> u64 {
+    std::env::var("SWEEPER_TUI_REFRESH_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(2)
 }
 
 fn spawn_resource_loader(tx: mpsc::Sender<Msg>) {
