@@ -182,8 +182,10 @@ fn draw_resources_panel(frame: &mut Frame, app: &App, area: Rect) {
 
 fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
     let groups: Vec<_> = app.visible_project_groups().into_iter().cloned().collect();
-    let header = Row::new(vec!["PROJECT", "PATH", "SESSION", "PROCS", "MEM", "PORTS"])
-        .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
+    let header = Row::new(vec![
+        "PROJECT", "PATH", "SESSION", "BRANCH", "PROCS", "MEM", "PORTS",
+    ])
+    .style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD));
 
     let rows: Vec<Row> = groups
         .iter()
@@ -200,10 +202,12 @@ fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
             };
             let mem_mb = s.memory_bytes as f64 / (1024.0 * 1024.0);
             let session = g.session_label.as_deref().unwrap_or("-");
+            let branch = g.git_branch.as_deref().unwrap_or("-");
             Row::new(vec![
                 Cell::from(g.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
                 Cell::from(g.path.clone()).style(Style::default().fg(MUTED)),
                 Cell::from(session).style(Style::default().fg(MUTED)),
+                Cell::from(branch).style(Style::default().fg(MUTED)),
                 Cell::from(s.process_count.to_string()),
                 Cell::from(format!("{mem_mb:.0} MB")).style(Style::default().fg(MEM)),
                 Cell::from(ports).style(Style::default().fg(PORT)),
@@ -215,11 +219,12 @@ fn draw_project_table(frame: &mut Frame, app: &mut App, area: Rect) {
         rows,
         [
             Constraint::Length(18),
-            Constraint::Percentage(35),
-            Constraint::Length(14),
+            Constraint::Percentage(30),
+            Constraint::Length(12),
+            Constraint::Length(10),
             Constraint::Length(8),
             Constraint::Length(10),
-            Constraint::Length(14),
+            Constraint::Length(12),
         ],
     )
     .header(header)

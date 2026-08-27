@@ -47,6 +47,9 @@ fn project_rows(groups: &[ProjectGroup]) -> Vec<ProjectJson> {
                 workspace_root: g.workspace_root.clone(),
                 package_name: g.package_name.clone(),
                 session_label: g.session_label.clone(),
+                git_branch: g.git_branch.clone(),
+                compose_project: g.compose_project.clone(),
+                dev_script: g.dev_script.clone(),
             }
         })
         .collect()
@@ -80,14 +83,32 @@ fn list_all(groups: &[ProjectGroup]) -> anyhow::Result<()> {
             .as_deref()
             .map(|s| format!("  {s}"))
             .unwrap_or_default();
+        let branch = g
+            .git_branch
+            .as_deref()
+            .map(|b| format!("  branch:{b}"))
+            .unwrap_or_default();
+        let compose = g
+            .compose_project
+            .as_deref()
+            .map(|c| format!("  compose:{c}"))
+            .unwrap_or_default();
+        let script = g
+            .dev_script
+            .as_deref()
+            .map(|s| format!("  script:{s}"))
+            .unwrap_or_default();
         println!(
-            "{}  {}  {}  {}  {}{}",
+            "{}  {}  {}  {}  {}{}{}{}{}",
             style::process_name(format!("{:<24}", g.name)),
             style::dim(&g.path),
             style::dim(format!("{} procs", g.processes.len())),
             style::mem(format!("{:.0} MB", mem as f64 / (1024.0 * 1024.0))),
             style::port(port_str),
-            style::dim(session)
+            style::dim(session),
+            style::dim(branch),
+            style::dim(compose),
+            style::dim(script)
         );
     }
     println!(
