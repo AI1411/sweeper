@@ -4,7 +4,7 @@ use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::process::kill::{kill_pid, KillOutcome};
 use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
-use crate::process::ports::pids_for_port;
+use crate::process::ports::{pids_for_port, pids_for_ports};
 use crate::process::tree::collect_tree_pids;
 use crate::process::ProcessInfo;
 use crate::style;
@@ -36,14 +36,28 @@ fn collect_unique_targets(
 ) -> anyhow::Result<(Vec<PortTarget>, Vec<u16>)> {
     let mut rows = Vec::new();
     let mut unused = Vec::new();
-    for &port in ports {
-        let pids = pids_for_port(port)?;
-        if pids.is_empty() {
-            unused.push(port);
-            continue;
+    if ports.len() <= 1 {
+        for &port in ports {
+            let pids = pids_for_port(port)?;
+            if pids.is_empty() {
+                unused.push(port);
+                continue;
+            }
+            for pid in pids {
+                rows.push((port, pid));
+            }
         }
-        for pid in pids {
-            rows.push((port, pid));
+    } else {
+        let map = pids_for_ports(ports)?;
+        for &port in ports {
+            let pids = map.get(&port).cloned().unwrap_or_default();
+            if pids.is_empty() {
+                unused.push(port);
+                continue;
+            }
+            for pid in pids {
+                rows.push((port, pid));
+            }
         }
     }
     let merged = merge_port_bindings(&rows);
