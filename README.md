@@ -61,7 +61,7 @@ sw project app  # inspect / kill a project
 | `sw <name>` | — | Fuzzy search by process name |
 | `sw :<port>` | — | Find process(es) by port (repeatable) |
 | `sw ports` | `p` | List LISTEN ports with process and PID |
-| `sw top` | `t` | Top processes by CPU and memory; interactive kill by rank or PID |
+| `sw top` | `t` | Top processes by CPU and memory; interactive kill by rank or PID (`--json` for machine output) |
 | `sw clean` | `c` | Propose leftover candidates; confirm before kill |
 
 `sw clean --exclude <pattern>` skips candidates whose name or PID contains the pattern (repeatable).  

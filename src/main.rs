@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
         Target::Name(q) => name::run_name(&q, force, tree, dry_run)?,
         Target::Ports(ps) => port::run_ports(&ps, force, tree, dry_run)?,
         Target::Sub(SubCommand::Ports) => ports_list::run_ports_list(json)?,
-        Target::Sub(SubCommand::Top) => top::run_top(force, tree, dry_run)?,
+        Target::Sub(SubCommand::Top) => top::run_top(force, tree, dry_run, json)?,
         Target::Sub(SubCommand::Clean { exclude }) => {
             clean::run_clean(force, &exclude, dry_run, json)?
         }

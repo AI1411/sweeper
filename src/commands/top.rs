@@ -10,10 +10,17 @@ use crate::style;
 
 use super::confirm::confirm;
 
-pub fn run_top(force: bool, tree: bool, dry_run: bool) -> anyhow::Result<()> {
+pub fn run_top(force: bool, tree: bool, dry_run: bool, json: bool) -> anyhow::Result<()> {
     let procs = list_processes();
     let cpu_leaders = top_by_cpu(&procs, 10);
     let mem_leaders = top_by_memory(&procs, 10);
+
+    if json {
+        return crate::json_output::emit_json(&crate::json_output::TopJson::from_leaders(
+            &cpu_leaders,
+            &mem_leaders,
+        ));
+    }
 
     println!("{}\n", style::header("CPU"));
     for (i, p) in cpu_leaders.iter().enumerate() {
@@ -200,6 +207,19 @@ mod tests {
             run_time_secs: 0,
             is_zombie: false,
         }
+    }
+
+    #[test]
+    fn top_json_shape() {
+        let procs = vec![proc(1, 5.0, 100), proc(2, 1.0, 500)];
+        let cpu = top_by_cpu(&procs, 10);
+        let mem = top_by_memory(&procs, 10);
+        let json = crate::json_output::TopJson::from_leaders(&cpu, &mem);
+        let text = serde_json::to_string(&json).expect("serialize");
+        let parsed: serde_json::Value = serde_json::from_str(&text).expect("parse");
+        assert_eq!(parsed["cpu"][0]["rank"], 1);
+        assert_eq!(parsed["cpu"][0]["pid"], 1);
+        assert_eq!(parsed["memory"][0]["pid"], 2);
     }
 
     #[test]
