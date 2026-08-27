@@ -2,6 +2,8 @@ use std::process::Command;
 use std::sync::{Mutex, Once, OnceLock};
 use std::time::{Duration, Instant};
 
+use std::collections::HashMap;
+
 use crate::error::{Result, SweeperError};
 use crate::process::ports_native;
 use crate::process::ProcessInfo;
@@ -122,6 +124,7 @@ pub fn listening_ports_cached(bypass_cache: bool) -> Result<Vec<(u16, u32)>> {
     Ok(pairs)
 }
 
+/// Resolve PIDs listening on `port`. Single-port callers may use targeted native/lsof lookup.
 pub fn pids_for_port(port: u16) -> Result<Vec<u32>> {
     match ports_native::try_pids_for_port(port) {
         Some(result) => match result {
@@ -136,6 +139,28 @@ pub fn pids_for_port(port: u16) -> Result<Vec<u32>> {
             pids_for_port_lsof(port)
         }
     }
+}
+
+/// Resolve multiple ports using the cached LISTEN table when possible.
+pub fn pids_for_ports(ports: &[u16]) -> Result<HashMap<u16, Vec<u32>>> {
+    if ports.is_empty() {
+        return Ok(HashMap::new());
+    }
+    if ports.len() == 1 {
+        let port = ports[0];
+        return Ok([(port, pids_for_port(port)?)].into_iter().collect());
+    }
+    let listen = listening_ports_cached(false)?;
+    let mut out: HashMap<u16, Vec<u32>> = HashMap::new();
+    for &port in ports {
+        let pids: Vec<u32> = listen
+            .iter()
+            .filter(|(p, _)| *p == port)
+            .map(|(_, pid)| *pid)
+            .collect();
+        out.insert(port, pids);
+    }
+    Ok(out)
 }
 
 pub fn merge_ports(procs: &mut [ProcessInfo], port_map: &[(u16, u32)]) {
@@ -159,5 +184,17 @@ mod cache_tests {
         let second = listening_ports_cached(false).expect("ports again");
         assert_eq!(first, second);
         clear_port_cache();
+    }
+
+    #[test]
+    fn pids_for_ports_empty() {
+        assert!(pids_for_ports(&[]).expect("empty").is_empty());
+    }
+
+    #[test]
+    fn pids_for_ports_single_delegates() {
+        let map = pids_for_ports(&[1]).expect("single");
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key(&1));
     }
 }
