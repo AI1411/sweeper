@@ -19,6 +19,8 @@ use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
 
+use std::io::{self, Write};
+
 pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> anyhow::Result<()> {
     let mut procs = list_processes();
     let ports = listening_ports().unwrap_or_default();
@@ -48,8 +50,8 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
     );
     print_summary_lines(&summary, proposals.len(), reclaim_estimate.as_ref());
 
-    for c in &proposals {
-        print_candidate_block(c);
+    for (i, c) in proposals.iter().enumerate() {
+        print!("{}", format_numbered_candidate_block(i + 1, c));
     }
     if proposals.is_empty() {
         return Ok(());
@@ -60,16 +62,15 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
         print_dry_run(&planned, false);
         return Ok(());
     }
-    if !confirm("Select processes to clean (confirm each)?")? {
+    let to_kill = select_clean_candidates(proposals.len())?;
+    if to_kill.is_empty() {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
     let mut outcomes = Vec::new();
-    for c in proposals {
-        let p = c.process;
-        if !confirm(&format!("Kill {} (pid {})?", p.name, p.pid))? {
-            continue;
-        }
+    for idx in to_kill {
+        let c = &proposals[idx];
+        let p = &c.process;
         let mut use_force = force;
         let mut outcome = kill_pid(p.pid, &p.name, use_force)?;
         if outcome == KillOutcome::StillAlive && !use_force && confirm("Force kill?")? {
@@ -357,8 +358,67 @@ pub fn format_summary_lines(
     out
 }
 
-fn print_candidate_block(c: &crate::clean::CleanCandidate) {
-    print!("{}", format_candidate_block(c));
+pub fn format_numbered_candidate_block(n: usize, c: &crate::clean::CleanCandidate) -> String {
+    use std::fmt::Write;
+    let mut out = format!("  {n}. ");
+    write!(out, "{}", format_candidate_block(c).trim_start()).unwrap();
+    out
+}
+
+/// Parse 1-based comma-separated selection (e.g. `"1,3"`) into 0-based indices.
+pub fn parse_clean_selection(input: &str, total: usize) -> Option<Vec<usize>> {
+    let trimmed = input.trim();
+    if trimmed.eq_ignore_ascii_case("q") {
+        return Some(Vec::new());
+    }
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut indices = Vec::new();
+    for part in trimmed.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let n: usize = part.parse().ok()?;
+        if n == 0 || n > total {
+            return None;
+        }
+        let idx = n - 1;
+        if !indices.contains(&idx) {
+            indices.push(idx);
+        }
+    }
+    indices.sort_unstable();
+    Some(indices)
+}
+
+fn select_clean_candidates(total: usize) -> anyhow::Result<Vec<usize>> {
+    if total == 0 {
+        return Ok(Vec::new());
+    }
+    let label = if total == 1 {
+        "Kill 1 process?".to_string()
+    } else {
+        format!("Kill all {total} processes?")
+    };
+    if confirm(&label)? {
+        return Ok((0..total).collect());
+    }
+    print!(
+        "Kill which? (comma-separated numbers 1-{total}, or 'q' to quit) {} ",
+        style::dim("[1,2,...]")
+    );
+    io::stdout().flush()?;
+    let mut buf = String::new();
+    io::stdin().read_line(&mut buf)?;
+    match parse_clean_selection(&buf, total) {
+        Some(indices) => Ok(indices),
+        None => {
+            println!("{}", style::warn("Invalid selection."));
+            Ok(Vec::new())
+        }
+    }
 }
 
 pub fn format_candidate_block(c: &crate::clean::CleanCandidate) -> String {
@@ -450,5 +510,27 @@ mod tests {
         assert!(text.contains("Recovered"));
         assert!(text.contains("Memory"));
         assert!(text.contains("Disk"));
+    }
+
+    #[test]
+    fn parse_clean_selection_all_indices() {
+        assert_eq!(parse_clean_selection("1,3", 3), Some(vec![0, 2]));
+    }
+
+    #[test]
+    fn parse_clean_selection_dedupes() {
+        assert_eq!(parse_clean_selection("2,2,1", 2), Some(vec![0, 1]));
+    }
+
+    #[test]
+    fn parse_clean_selection_quit() {
+        assert_eq!(parse_clean_selection("q", 5), Some(vec![]));
+    }
+
+    #[test]
+    fn parse_clean_selection_invalid() {
+        assert_eq!(parse_clean_selection("0,1", 2), None);
+        assert_eq!(parse_clean_selection("99", 2), None);
+        assert_eq!(parse_clean_selection("", 2), None);
     }
 }
