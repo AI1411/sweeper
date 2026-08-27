@@ -46,16 +46,83 @@ pub fn list_processes() -> Vec<ProcessInfo> {
 
 /// Developer-centric ordering: listeners first, then memory, CPU, name.
 pub fn sort_processes_for_display(procs: &mut [ProcessInfo]) {
-    procs.sort_by(|a, b| {
-        let a_listen = !a.ports.is_empty();
-        let b_listen = !b.ports.is_empty();
-        b_listen
-            .cmp(&a_listen)
+    sort_processes(procs, SortMode::Default);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortMode {
+    Default,
+    CpuDesc,
+    MemoryDesc,
+    NameAsc,
+    PortFirst,
+}
+
+impl SortMode {
+    pub fn cycle(self) -> Self {
+        match self {
+            SortMode::Default => SortMode::CpuDesc,
+            SortMode::CpuDesc => SortMode::MemoryDesc,
+            SortMode::MemoryDesc => SortMode::NameAsc,
+            SortMode::NameAsc => SortMode::PortFirst,
+            SortMode::PortFirst => SortMode::Default,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            SortMode::Default => "default",
+            SortMode::CpuDesc => "CPU",
+            SortMode::MemoryDesc => "memory",
+            SortMode::NameAsc => "name",
+            SortMode::PortFirst => "port",
+        }
+    }
+}
+
+pub fn sort_processes(procs: &mut [ProcessInfo], mode: SortMode) {
+    procs.sort_by(|a, b| compare_processes(a, b, mode));
+}
+
+pub fn compare_processes(a: &ProcessInfo, b: &ProcessInfo, mode: SortMode) -> std::cmp::Ordering {
+    match mode {
+        SortMode::Default => {
+            let a_listen = !a.ports.is_empty();
+            let b_listen = !b.ports.is_empty();
+            b_listen
+                .cmp(&a_listen)
+                .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+                .then_with(|| b.cpu.total_cmp(&a.cpu))
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.pid.cmp(&b.pid))
+        }
+        SortMode::CpuDesc => b
+            .cpu
+            .total_cmp(&a.cpu)
             .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+            .then_with(|| a.pid.cmp(&b.pid)),
+        SortMode::MemoryDesc => b
+            .memory_bytes
+            .cmp(&a.memory_bytes)
             .then_with(|| b.cpu.total_cmp(&a.cpu))
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-            .then_with(|| a.pid.cmp(&b.pid))
-    });
+            .then_with(|| a.pid.cmp(&b.pid)),
+        SortMode::NameAsc => a
+            .name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then_with(|| a.pid.cmp(&b.pid)),
+        SortMode::PortFirst => {
+            let a_port = a.ports.first().copied().unwrap_or(u16::MAX);
+            let b_port = b.ports.first().copied().unwrap_or(u16::MAX);
+            a_port
+                .cmp(&b_port)
+                .then_with(|| b.memory_bytes.cmp(&a.memory_bytes))
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.pid.cmp(&b.pid))
+        }
+    }
 }
 
 /// Refresh CPU, memory, and liveness for an existing snapshot; add new PIDs and drop exited ones.
@@ -152,6 +219,140 @@ mod tests {
             Some("/usr/bin/node ./node_modules/.bin/vite")
         ));
         assert!(!name_matches("vite", "node", Some("node server.js")));
+    }
+
+    #[test]
+    fn sort_cpu_desc_orders_by_cpu() {
+        let mut procs = vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 0,
+                name: "a".into(),
+                cpu: 1.0,
+                memory_bytes: 500,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "b".into(),
+                cpu: 5.0,
+                memory_bytes: 1000,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        sort_processes(&mut procs, SortMode::CpuDesc);
+        assert_eq!(procs[0].pid, 2);
+    }
+
+    #[test]
+    fn sort_memory_desc_orders_by_memory() {
+        let mut procs = vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 0,
+                name: "a".into(),
+                cpu: 1.0,
+                memory_bytes: 500,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "b".into(),
+                cpu: 0.1,
+                memory_bytes: 9000,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        sort_processes(&mut procs, SortMode::MemoryDesc);
+        assert_eq!(procs[0].pid, 2);
+    }
+
+    #[test]
+    fn sort_name_asc_orders_alphabetically() {
+        let mut procs = vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 0,
+                name: "zebra".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "alpha".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        sort_processes(&mut procs, SortMode::NameAsc);
+        assert_eq!(procs[0].name, "alpha");
+    }
+
+    #[test]
+    fn sort_port_first_orders_by_lowest_port() {
+        let mut procs = vec![
+            ProcessInfo {
+                pid: 1,
+                ppid: 0,
+                name: "a".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![8080],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+            ProcessInfo {
+                pid: 2,
+                ppid: 1,
+                name: "b".into(),
+                cpu: 0.0,
+                memory_bytes: 0,
+                ports: vec![3000],
+                command: None,
+                cwd: None,
+                run_time_secs: 0,
+                is_zombie: false,
+            },
+        ];
+        sort_processes(&mut procs, SortMode::PortFirst);
+        assert_eq!(procs[0].pid, 2);
+    }
+
+    #[test]
+    fn sort_mode_cycles() {
+        assert_eq!(SortMode::Default.cycle(), SortMode::CpuDesc);
+        assert_eq!(SortMode::PortFirst.cycle(), SortMode::Default);
     }
 
     #[test]

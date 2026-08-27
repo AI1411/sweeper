@@ -4,6 +4,7 @@ use ratatui::widgets::TableState;
 
 use crate::clean::{confidence_level, propose_leftovers, CleanCandidate};
 use crate::memory::{format_bytes, format_estimate};
+use crate::process::list::SortMode;
 use crate::process::tree::{layout_tree_rows, TreeRow};
 use crate::process::ProcessInfo;
 use crate::project::{group_projects, summarize_group, ProjectGroup};
@@ -55,6 +56,7 @@ pub struct App {
     pub resource_snapshot: ResourceSnapshot,
     pub confirming_reclaim: bool,
     pub show_help_overlay: bool,
+    pub sort_mode: SortMode,
 }
 
 impl App {
@@ -87,6 +89,7 @@ impl App {
             resource_snapshot: ResourceSnapshot::unavailable(),
             confirming_reclaim: false,
             show_help_overlay: false,
+            sort_mode: SortMode::Default,
         };
         app.refilter();
         app
@@ -614,6 +617,7 @@ impl App {
             })
             .map(|(i, _)| i)
             .collect();
+        self.apply_sort_to_filtered();
         if self.cursor >= self.filtered.len() && !self.filtered.is_empty() {
             self.cursor = self.filtered.len() - 1;
         }
@@ -765,6 +769,35 @@ impl App {
         };
     }
 
+    pub fn toggle_sort_mode(&mut self) {
+        if self.view_mode != ViewMode::Processes || self.in_project_list() {
+            return;
+        }
+        self.sort_mode = self.sort_mode.cycle();
+        self.sort_process_list();
+        self.apply_sort_to_filtered();
+        self.rebuild_tree_rows();
+        self.sync_table_state();
+        self.status = format!("Sort: {} (s to cycle)", self.sort_mode.label());
+    }
+
+    fn sort_process_list(&mut self) {
+        crate::process::list::sort_processes(&mut self.processes, self.sort_mode);
+    }
+
+    fn apply_sort_to_filtered(&mut self) {
+        if self.view_mode != ViewMode::Processes || self.in_project_list() {
+            return;
+        }
+        self.filtered.sort_by(|&a, &b| {
+            crate::process::list::compare_processes(
+                &self.processes[a],
+                &self.processes[b],
+                self.sort_mode,
+            )
+        });
+    }
+
     pub fn pids_to_kill(&self) -> Vec<u32> {
         if self.in_project_list() {
             if let Some(g) = self.current_project_group() {
@@ -788,7 +821,7 @@ impl App {
             p.ports.clear();
         }
         crate::process::ports::merge_ports(&mut self.processes, port_map);
-        crate::process::list::sort_processes_for_display(&mut self.processes);
+        self.sort_process_list();
         if self.view_mode == ViewMode::Clean {
             self.refresh_clean_proposals();
         } else {
@@ -818,7 +851,7 @@ impl App {
         if !self.last_ports.is_empty() {
             crate::process::ports::merge_ports(&mut self.processes, &self.last_ports);
         }
-        crate::process::list::sort_processes_for_display(&mut self.processes);
+        self.sort_process_list();
         self.project_groups = group_projects(&self.processes);
         if self.view_mode == ViewMode::Clean {
             self.refresh_clean_proposals();
@@ -1067,9 +1100,8 @@ mod tests {
                 is_zombie: false,
             },
         ];
-        let mut app = App::new(procs);
-        app.move_down();
-        app.move_down();
+        let app = App::new(procs);
+        // node listener sorts first under default sort mode
         let lines = app.format_process_detail();
         assert!(lines.iter().any(|l| l.contains("zsh → bun → node")));
     }
@@ -1216,6 +1248,19 @@ mod tests {
         assert!(lines.iter().any(|l| l.contains("VM Memory")));
         app.set_resource_panel(ResourcePanel::Containers);
         assert!(app.resource_lines().iter().any(|l| l == "Containers"));
+    }
+
+    #[test]
+    fn toggle_sort_mode_cycles_and_updates_status() {
+        let mut app = App::new(vec![
+            proc(1, "zebra", vec![8080]),
+            proc(2, "alpha", vec![3000]),
+        ]);
+        app.toggle_sort_mode();
+        assert_eq!(app.sort_mode, SortMode::CpuDesc);
+        assert!(app.status.contains("Sort:"));
+        app.toggle_sort_mode();
+        assert_eq!(app.sort_mode, SortMode::MemoryDesc);
     }
 
     #[test]
