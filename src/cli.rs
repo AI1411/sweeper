@@ -68,6 +68,7 @@ sw node             find by name\n  \
 sw :3000            find by port\n  \
 sw ports --json     machine-readable ports\n  \
 sw clean            review leftover candidates\n\n\
+After listing matches, confirm all or pick rows with 1-3, all, high, or q.\n\n\
 See docs/sw.1.md or README for full TUI keybindings."
 )]
 pub struct CliArgs {

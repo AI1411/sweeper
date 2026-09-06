@@ -3,6 +3,7 @@ use crate::clean::{
     propose_leftovers, summarize, CleanSummary,
 };
 use crate::commands::confirm::confirm;
+use crate::commands::select::{confirm_or_pick, parse_selection, ParseHigh};
 use crate::disk::collect_docker_disk_report;
 use crate::history::{append_entry, entry_for_process, KillSignal};
 use crate::json_output::{
@@ -18,8 +19,6 @@ use crate::process::list::list_processes;
 use crate::process::plan::{plan_kills, print_dry_run};
 use crate::process::ports::{listening_ports, merge_ports};
 use crate::style;
-
-use std::io::{self, Write};
 
 pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> anyhow::Result<()> {
     let mut procs = list_processes();
@@ -61,7 +60,7 @@ pub fn run_clean(force: bool, exclude: &[String], dry_run: bool, json: bool) -> 
         print_dry_run(&planned, false);
         return Ok(());
     }
-    let to_kill = select_clean_candidates(proposals.len())?;
+    let to_kill = select_clean_candidates(&proposals)?;
     if to_kill.is_empty() {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
@@ -367,58 +366,33 @@ pub fn format_numbered_candidate_block(n: usize, c: &crate::clean::CleanCandidat
 
 /// Parse 1-based comma-separated selection (e.g. `"1,3"`) into 0-based indices.
 pub fn parse_clean_selection(input: &str, total: usize) -> Option<Vec<usize>> {
-    let trimmed = input.trim();
-    if trimmed.eq_ignore_ascii_case("q") {
-        return Some(Vec::new());
-    }
-    if trimmed.is_empty() {
-        return None;
-    }
-    let mut indices = Vec::new();
-    for part in trimmed.split(',') {
-        let part = part.trim();
-        if part.is_empty() {
-            continue;
-        }
-        let n: usize = part.parse().ok()?;
-        if n == 0 || n > total {
-            return None;
-        }
-        let idx = n - 1;
-        if !indices.contains(&idx) {
-            indices.push(idx);
-        }
-    }
-    indices.sort_unstable();
-    Some(indices)
+    parse_selection(input, total, ParseHigh::None)
 }
 
-fn select_clean_candidates(total: usize) -> anyhow::Result<Vec<usize>> {
+fn select_clean_candidates(
+    proposals: &[crate::clean::CleanCandidate],
+) -> anyhow::Result<Vec<usize>> {
+    let total = proposals.len();
     if total == 0 {
         return Ok(Vec::new());
     }
+    let high: Vec<usize> = proposals
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| confidence_level(c) == "high")
+        .map(|(i, _)| i)
+        .collect();
     let label = if total == 1 {
         "Kill 1 process?".to_string()
     } else {
         format!("Kill all {total} processes?")
     };
-    if confirm(&label)? {
-        return Ok((0..total).collect());
-    }
-    print!(
-        "Kill which? (comma-separated numbers 1-{total}, or 'q' to quit) {} ",
-        style::dim("[1,2,...]")
-    );
-    io::stdout().flush()?;
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    match parse_clean_selection(&buf, total) {
-        Some(indices) => Ok(indices),
-        None => {
-            println!("{}", style::warn("Invalid selection."));
-            Ok(Vec::new())
-        }
-    }
+    let high = if high.is_empty() {
+        ParseHigh::None
+    } else {
+        ParseHigh::Indices(&high)
+    };
+    Ok(confirm_or_pick(total, &label, high)?)
 }
 
 pub fn format_candidate_block(c: &crate::clean::CleanCandidate) -> String {
@@ -531,6 +505,11 @@ mod tests {
     fn parse_clean_selection_invalid() {
         assert_eq!(parse_clean_selection("0,1", 2), None);
         assert_eq!(parse_clean_selection("99", 2), None);
-        assert_eq!(parse_clean_selection("", 2), None);
+        assert_eq!(parse_clean_selection("nope", 2), None);
+    }
+
+    #[test]
+    fn parse_clean_selection_empty_cancels() {
+        assert_eq!(parse_clean_selection("", 2), Some(vec![]));
     }
 }

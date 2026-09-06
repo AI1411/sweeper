@@ -83,6 +83,7 @@ sw doctor       # diagnose setup
 
 ### Command notes
 
+- **Kill selection**: After `sw node`, `sw :3000`, or `sw clean` lists matches, answer `Kill all?` or pick rows with `1,3`, ranges (`1-3`), `all`, `high` (clean only), or `q`. Empty Enter cancels.
 - **`sw clean`**: `--exclude <pattern>` skips candidates whose name or PID contains the pattern (repeatable). Also honors `SWEEPER_CLEAN_EXCLUDE` (comma-separated) and the user `config.toml` (`clean.exclude`) — see platform paths above.
 - **`sw project`**: Recognizes monorepo workspaces (`pnpm-workspace.yaml`, npm `workspaces`, `turbo.json`, `nx.json`) and shows tmux/screen session labels when detected. Different git worktree paths appear as separate groups. Remote/nested tmux sessions may not resolve a session name.
 - **`sw memory`**: `sw memory reclaim` reclaims OrbStack VM memory (confirmation required). `sw memory watch` streams usage (`--interval`, `--containers`). Show mode supports `--sort`, `--warn-above`, and `--leaks`.
@@ -130,7 +131,7 @@ Launch with bare `sw`. Press `?` for the in-app help overlay.
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl-u` / `Ctrl-d` | Page up / down |
 | `Space` | Select / deselect |
-| `/` | Search |
+| `/` or type | Search (PID digits match too) |
 | `k` | Preview SIGTERM selected; `y` confirms |
 | `K` | Preview SIGKILL selected; `y` confirms |
 | `t` | Preview SIGTERM + descendants; `y` confirms |

@@ -639,6 +639,9 @@ impl App {
                 let mut score =
                     crate::process::list::score_name_match(&q, &p.name, p.command.as_deref());
                 if !q.is_empty() {
+                    if p.pid.to_string().contains(&q) {
+                        score = score.max(800);
+                    }
                     for port in &p.ports {
                         let s = port.to_string();
                         if s.contains(q_port) || format!(":{port}").contains(&q) {
@@ -986,6 +989,16 @@ mod tests {
         app.refilter();
         assert!(app.filtered.is_empty());
         assert_eq!(app.table_state.selected(), None);
+    }
+
+    #[test]
+    fn refilter_matches_pid_substring() {
+        let mut app =
+            App::with_processes(vec![proc(4812, "node", vec![]), proc(99, "bash", vec![])]);
+        app.query = "4812".into();
+        app.refilter();
+        assert_eq!(app.filtered.len(), 1);
+        assert_eq!(app.processes[app.filtered[0]].pid, 4812);
     }
 
     #[test]

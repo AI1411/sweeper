@@ -8,9 +8,10 @@ use crate::report;
 use crate::style;
 
 use super::confirm::confirm;
+use super::select::{confirm_or_pick, print_process_table, ParseHigh};
 
 pub fn run_name(query: &str, force: bool, tree: bool, dry_run: bool) -> anyhow::Result<()> {
-    let matches = find_by_name_fuzzy(query);
+    let mut matches = find_by_name_fuzzy(query);
     if matches.is_empty() {
         println!(
             "{}",
@@ -18,16 +19,11 @@ pub fn run_name(query: &str, force: bool, tree: bool, dry_run: bool) -> anyhow::
         );
         return Ok(());
     }
+    let listen = crate::process::ports::listening_ports().unwrap_or_default();
+    crate::process::ports::merge_ports(&mut matches, &listen);
 
     let all = list_processes();
     let targets = expand_targets(&all, &matches, tree);
-
-    if dry_run {
-        let roots: Vec<u32> = targets.iter().map(|p| p.pid).collect();
-        let planned = plan_kills(&all, &roots, tree);
-        print_dry_run(&planned, tree);
-        return Ok(());
-    }
 
     println!(
         "{} {} processes{}\n",
@@ -39,28 +35,35 @@ pub fn run_name(query: &str, force: bool, tree: bool, dry_run: bool) -> anyhow::
             String::new()
         }
     );
-    for p in &targets {
-        println!(
-            "  {}  {}  {}  {}",
-            style::pid(format!("{:>6}", p.pid)),
-            style::process_name(&p.name),
-            style::cpu(p.cpu),
-            style::mem(format!("{:.0} MB", p.memory_mb()))
-        );
-    }
+    print_process_table(&targets);
     let total: u64 = targets.iter().map(|p| p.memory_bytes).sum();
     println!(
         "\n{} {}",
         style::dim("Total memory:"),
         style::mem(format!("{:.1} GB", total as f64 / 1e9))
     );
-    if !confirm("Kill all?")? {
+
+    if dry_run {
+        let roots: Vec<u32> = targets.iter().map(|p| p.pid).collect();
+        let planned = plan_kills(&all, &roots, tree);
+        print_dry_run(&planned, tree);
+        return Ok(());
+    }
+
+    let label = if targets.len() == 1 {
+        "Kill this process?".to_string()
+    } else {
+        format!("Kill all {} processes?", targets.len())
+    };
+    let chosen = confirm_or_pick(targets.len(), &label, ParseHigh::None)?;
+    if chosen.is_empty() {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
     let mut outcomes = Vec::new();
-    for p in targets {
-        let outcome = kill_one(&p, force)?;
+    for idx in chosen {
+        let p = &targets[idx];
+        let outcome = kill_one(p, force)?;
         outcomes.push(report::KillResult::new(
             p.memory_bytes,
             p.ports.clone(),

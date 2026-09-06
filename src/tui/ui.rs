@@ -473,46 +473,46 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
 fn context_help_line(app: &App) -> Line<'static> {
     if app.resources_open {
         return help_spans(&[
-            ("[↑↓]", "Move"),
-            ("[R]", "Reclaim"),
-            ("[C]", "Containers"),
-            ("[D]", "Docker"),
-            ("[Esc]", "Back"),
-            ("[?]", "All keys"),
+            ("↑↓", "Move"),
+            ("R", "Reclaim"),
+            ("C", "Containers"),
+            ("D", "Docker"),
+            ("Esc", "Back"),
+            ("?", "All keys"),
         ]);
     }
     if app.searching {
-        return help_spans(&[("[Enter/Esc]", "Done"), ("[Backspace]", "Delete")]);
+        return help_spans(&[("Enter/Esc", "Done"), ("Backspace", "Delete")]);
     }
     if app.in_clean_list() {
         return help_spans(&[
-            ("[↑↓]", "Move"),
-            ("[Space]", "Select"),
-            ("[k/K]", "Kill→y"),
-            ("[H]", "High-only"),
-            ("[c]", "Back"),
-            ("[?]", "All keys"),
+            ("↑↓", "Move"),
+            ("Space", "Select"),
+            ("k/K", "Kill→y"),
+            ("H", "High-only"),
+            ("c", "Back"),
+            ("?", "All keys"),
         ]);
     }
     if app.in_project_list() {
         return help_spans(&[
-            ("[↑↓]", "Move"),
-            ("[Enter]", "Expand"),
-            ("[k/K]", "Kill→y"),
-            ("[P]", "Back"),
-            ("[?]", "All keys"),
+            ("↑↓", "Move"),
+            ("Enter", "Expand"),
+            ("k/K", "Kill→y"),
+            ("P", "Back"),
+            ("?", "All keys"),
         ]);
     }
     help_spans(&[
-        ("[↑↓]", "Move"),
-        ("[Space]", "Select"),
-        ("[k/K]", "Kill→y"),
-        ("[p]", "Ports"),
-        ("[P]", "Projects"),
-        ("[c]", "Clean"),
-        ("[/]", "Search"),
-        ("[?]", "All keys"),
-        ("[q]", "Quit"),
+        ("↑↓", "Move"),
+        ("Space", "Select"),
+        ("k/K", "Kill→y"),
+        ("type", "Search"),
+        ("p", "Ports"),
+        ("P", "Projects"),
+        ("c", "Clean"),
+        ("?", "All keys"),
+        ("q", "Quit"),
     ])
 }
 
@@ -534,7 +534,7 @@ fn draw_help_overlay(frame: &mut Frame) {
         )),
         Line::from(""),
         Line::from("Navigation: ↑↓ j  g/G first/last  PgUp/PgDn  Ctrl-u/d"),
-        Line::from("Selection:  Space toggle  / search"),
+        Line::from("Selection:  Space toggle  type to search  / search  PID ok"),
         Line::from("Kill:       k SIGTERM→y  K SIGKILL  t tree  T force tree"),
         Line::from("Views:      p ports-only  e tree view  P projects  c clean"),
         Line::from("            H high-confidence clean  o OrbStack  i detail"),

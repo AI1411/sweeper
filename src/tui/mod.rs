@@ -316,6 +316,11 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Char('D') if app.resources_open => {
             app.set_resource_panel(crate::tui::resources::ResourcePanel::Docker);
         }
+        KeyCode::Char(c) if !app.resources_open && !c.is_control() && !c.is_whitespace() => {
+            app.searching = true;
+            app.query.push(c);
+            app.refilter();
+        }
         _ => {}
     }
     false
