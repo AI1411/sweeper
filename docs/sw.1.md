@@ -26,7 +26,7 @@ List TCP LISTEN ports with process name and PID.
 Show CPU and memory leaders; interactive kill by rank or PID.
 
 **clean** (**c**)  
-Propose leftover dev candidates (orphans, stale listeners, zombies). Never auto-kills.
+Propose leftover dev candidates (orphans, stale listeners, zombies). Never auto-kills. After the list, confirm all or pick with `1-3`, `all`, `high`, or `q`.
 
 **history** (**h**)  
 Show kill history. **--last** prints one entry.
@@ -58,7 +58,7 @@ Print help.
 | ↑/↓, j | Move selection |
 | g / G | First / last row |
 | PgUp/PgDn, Ctrl-u/d | Page |
-| / | Search |
+| / or type | Search (names, ports, PIDs) |
 | p | Ports-only filter |
 | k / K | SIGTERM / SIGKILL preview; y confirms |
 | t / T | Tree kill preview |

@@ -10,12 +10,31 @@ use crate::process::ProcessInfo;
 use crate::style;
 
 use super::confirm::confirm;
+use super::select::{confirm_or_pick, format_process_header, format_process_row, ParseHigh};
 
 #[derive(Debug, Clone)]
 struct PortTarget {
     pid: u32,
     ports: Vec<u16>,
     info: Option<ProcessInfo>,
+}
+
+fn target_as_process(t: &PortTarget) -> ProcessInfo {
+    let mut p = t.info.clone().unwrap_or_else(|| ProcessInfo {
+        pid: t.pid,
+        ppid: 0,
+        name: "?".into(),
+        cpu: 0.0,
+        memory_bytes: 0,
+        ports: t.ports.clone(),
+        command: None,
+        cwd: None,
+        run_time_secs: 0,
+        is_zombie: false,
+    });
+    p.pid = t.pid;
+    p.ports.clone_from(&t.ports);
+    p
 }
 
 /// Deduplicate PIDs across port bindings, merging the port list per PID.
@@ -92,32 +111,9 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool, dry_run: bool) -> anyho
         return Ok(());
     }
 
-    println!(
-        "{}  {}    {}     {}    {}",
-        style::header("PORT"),
-        style::header("PID"),
-        style::header("PROCESS"),
-        style::header("CPU"),
-        style::header("MEM")
-    );
-    for t in &targets {
-        let name = t.info.as_ref().map(|p| p.name.as_str()).unwrap_or("?");
-        let cpu = t.info.as_ref().map(|p| p.cpu).unwrap_or(0.0);
-        let mem = t.info.as_ref().map(|p| p.memory_mb()).unwrap_or(0.0);
-        let port_str = t
-            .ports
-            .iter()
-            .map(|p| p.to_string())
-            .collect::<Vec<_>>()
-            .join(",");
-        println!(
-            "{} {} {} {}  {}",
-            style::port(format!("{port_str:<7}")),
-            style::pid(format!("{:<6}", t.pid)),
-            style::process_name(format!("{name:<10}")),
-            style::cpu(cpu),
-            style::mem(format!("{mem:.0}MB"))
-        );
+    println!("{}", format_process_header());
+    for (i, t) in targets.iter().enumerate() {
+        println!("{}", format_process_row(i + 1, &target_as_process(t)));
     }
 
     let root_pids: Vec<u32> = targets.iter().map(|t| t.pid).collect();
@@ -128,21 +124,24 @@ pub fn run_ports(ports: &[u16], force: bool, tree: bool, dry_run: bool) -> anyho
         return Ok(());
     }
 
-    let kill_pids = if tree {
-        collect_tree_pids(&procs, &root_pids)
+    let label = if targets.len() == 1 {
+        "Kill this process?".to_string()
+    } else if tree {
+        format!("Kill all {} process trees?", targets.len())
     } else {
-        root_pids.clone()
+        format!("Kill all {} processes?", targets.len())
     };
-
-    let label = if tree {
-        format!("Kill {} process tree member(s)?", kill_pids.len())
-    } else {
-        format!("Kill {} process(es)?", targets.len())
-    };
-    if !confirm(&label)? {
+    let chosen = confirm_or_pick(targets.len(), &label, ParseHigh::None)?;
+    if chosen.is_empty() {
         println!("{}", style::warn("Cancelled."));
         return Ok(());
     }
+    let root_pids: Vec<u32> = chosen.iter().map(|&i| targets[i].pid).collect();
+    let kill_pids = if tree {
+        collect_tree_pids(&procs, &root_pids)
+    } else {
+        root_pids
+    };
 
     let mut outcomes = Vec::new();
     for pid in kill_pids {

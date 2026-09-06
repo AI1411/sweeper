@@ -16,7 +16,6 @@ const MEM: Color = Color::Magenta;
 const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
-    let detail_rows = if app.show_detail { 5 } else { 0 };
     let search_rows = if app.resources_open || !app.resource_snapshot.available {
         3
     } else if app.resource_snapshot.available {
@@ -24,19 +23,19 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     } else {
         3
     };
+    let mut constraints = vec![Constraint::Length(search_rows), Constraint::Min(5)];
+    if app.show_detail {
+        constraints.push(Constraint::Length(5));
+    }
+    constraints.push(Constraint::Length(3));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(search_rows),
-            Constraint::Min(5),
-            Constraint::Length(detail_rows),
-            Constraint::Length(3),
-        ])
+        .constraints(constraints)
         .split(frame.area());
 
     draw_search(frame, app, chunks[0]);
     draw_table(frame, app, chunks[1]);
-    if app.show_detail && chunks.len() > 3 {
+    if app.show_detail {
         draw_detail(frame, app, chunks[2]);
         draw_footer(frame, app, chunks[3]);
     } else {
@@ -473,46 +472,46 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
 fn context_help_line(app: &App) -> Line<'static> {
     if app.resources_open {
         return help_spans(&[
-            ("[↑↓]", "Move"),
-            ("[R]", "Reclaim"),
-            ("[C]", "Containers"),
-            ("[D]", "Docker"),
-            ("[Esc]", "Back"),
-            ("[?]", "All keys"),
+            ("↑↓", "Move"),
+            ("R", "Reclaim"),
+            ("C", "Containers"),
+            ("D", "Docker"),
+            ("Esc", "Back"),
+            ("?", "All keys"),
         ]);
     }
     if app.searching {
-        return help_spans(&[("[Enter/Esc]", "Done"), ("[Backspace]", "Delete")]);
+        return help_spans(&[("Enter/Esc", "Done"), ("Backspace", "Delete")]);
     }
     if app.in_clean_list() {
         return help_spans(&[
-            ("[↑↓]", "Move"),
-            ("[Space]", "Select"),
-            ("[k/K]", "Kill→y"),
-            ("[H]", "High-only"),
-            ("[c]", "Back"),
-            ("[?]", "All keys"),
+            ("↑↓", "Move"),
+            ("Space", "Select"),
+            ("k/K", "Kill→y"),
+            ("H", "High-only"),
+            ("c", "Back"),
+            ("?", "All keys"),
         ]);
     }
     if app.in_project_list() {
         return help_spans(&[
-            ("[↑↓]", "Move"),
-            ("[Enter]", "Expand"),
-            ("[k/K]", "Kill→y"),
-            ("[P]", "Back"),
-            ("[?]", "All keys"),
+            ("↑↓", "Move"),
+            ("Enter", "Expand"),
+            ("k/K", "Kill→y"),
+            ("P", "Back"),
+            ("?", "All keys"),
         ]);
     }
     help_spans(&[
-        ("[↑↓]", "Move"),
-        ("[Space]", "Select"),
-        ("[k/K]", "Kill→y"),
-        ("[p]", "Ports"),
-        ("[P]", "Projects"),
-        ("[c]", "Clean"),
-        ("[/]", "Search"),
-        ("[?]", "All keys"),
-        ("[q]", "Quit"),
+        ("↑↓", "Move"),
+        ("Space", "Select"),
+        ("k/K", "Kill→y"),
+        ("type", "Search"),
+        ("p", "Ports"),
+        ("P", "Projects"),
+        ("c", "Clean"),
+        ("?", "All keys"),
+        ("q", "Quit"),
     ])
 }
 
@@ -534,7 +533,7 @@ fn draw_help_overlay(frame: &mut Frame) {
         )),
         Line::from(""),
         Line::from("Navigation: ↑↓ j  g/G first/last  PgUp/PgDn  Ctrl-u/d"),
-        Line::from("Selection:  Space toggle  / search"),
+        Line::from("Selection:  Space toggle  type to search  / search  PID ok"),
         Line::from("Kill:       k SIGTERM→y  K SIGKILL  t tree  T force tree"),
         Line::from("Views:      p ports-only  e tree view  P projects  c clean"),
         Line::from("            H high-confidence clean  o OrbStack  i detail"),

@@ -79,6 +79,28 @@ fn page_up_and_down_move_by_viewport() {
 }
 
 #[test]
+fn unbound_letter_starts_search() {
+    let mut app = App::with_processes(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
+    handle_test_key(&mut app, press(KeyCode::Char('n')));
+    assert!(app.searching);
+    assert_eq!(app.query, "n");
+    assert_eq!(app.filtered.len(), 1);
+    assert_eq!(app.processes[app.filtered[0]].name, "node");
+}
+
+#[test]
+fn pid_query_matches_process() {
+    let mut app = App::with_processes(vec![proc(4812, "node", vec![]), proc(99, "bash", vec![])]);
+    handle_test_key(&mut app, press(KeyCode::Char('/')));
+    for c in ['4', '8', '1', '2'] {
+        handle_test_key(&mut app, press(KeyCode::Char(c)));
+    }
+    assert_eq!(app.query, "4812");
+    assert_eq!(app.filtered.len(), 1);
+    assert_eq!(app.processes[app.filtered[0]].pid, 4812);
+}
+
+#[test]
 fn search_key_refilters_visible_rows() {
     let mut app = App::with_processes(vec![proc(1, "node", vec![3000]), proc(2, "bash", vec![])]);
     handle_test_key(&mut app, press(KeyCode::Char('/')));
@@ -178,4 +200,27 @@ fn draw_smoke_test_backend_layout() {
         .collect::<String>();
     assert!(content.contains("Sweeper"));
     assert!(content.contains("node"));
+    assert!(!content.contains("[["));
+    assert!(content.contains("Help"));
+    assert!(content.contains("Search"));
+}
+
+#[test]
+fn footer_stays_visible_with_detail_panel() {
+    let mut app = App::with_processes(vec![proc(1, "node", vec![3000])]);
+    app.show_detail = true;
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|frame| sweeper::tui::ui::draw(frame, &mut app))
+        .expect("draw");
+    let content = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|c| c.symbol())
+        .collect::<String>();
+    assert!(content.contains("Help"));
+    assert!(content.contains("Detail"));
 }
