@@ -16,7 +16,6 @@ const MEM: Color = Color::Magenta;
 const MUTED: Color = Color::DarkGray;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
-    let detail_rows = if app.show_detail { 5 } else { 0 };
     let search_rows = if app.resources_open || !app.resource_snapshot.available {
         3
     } else if app.resource_snapshot.available {
@@ -24,19 +23,19 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     } else {
         3
     };
+    let mut constraints = vec![Constraint::Length(search_rows), Constraint::Min(5)];
+    if app.show_detail {
+        constraints.push(Constraint::Length(5));
+    }
+    constraints.push(Constraint::Length(3));
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(search_rows),
-            Constraint::Min(5),
-            Constraint::Length(detail_rows),
-            Constraint::Length(3),
-        ])
+        .constraints(constraints)
         .split(frame.area());
 
     draw_search(frame, app, chunks[0]);
     draw_table(frame, app, chunks[1]);
-    if app.show_detail && chunks.len() > 3 {
+    if app.show_detail {
         draw_detail(frame, app, chunks[2]);
         draw_footer(frame, app, chunks[3]);
     } else {

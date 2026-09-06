@@ -201,5 +201,26 @@ fn draw_smoke_test_backend_layout() {
     assert!(content.contains("Sweeper"));
     assert!(content.contains("node"));
     assert!(!content.contains("[["));
-    assert!(content.contains("[type] Search") || content.contains("Search"));
+    assert!(content.contains("Help"));
+    assert!(content.contains("Search"));
+}
+
+#[test]
+fn footer_stays_visible_with_detail_panel() {
+    let mut app = App::with_processes(vec![proc(1, "node", vec![3000])]);
+    app.show_detail = true;
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("terminal");
+    terminal
+        .draw(|frame| sweeper::tui::ui::draw(frame, &mut app))
+        .expect("draw");
+    let content = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|c| c.symbol())
+        .collect::<String>();
+    assert!(content.contains("Help"));
+    assert!(content.contains("Detail"));
 }
